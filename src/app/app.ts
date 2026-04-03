@@ -34,6 +34,7 @@ export class App implements AfterViewInit, OnDestroy {
   protected readonly navSections = [
     'about',
     'skills',
+    'techstack',
     'projects',
     'certifications',
     'achievements',

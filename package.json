@@ -5,8 +5,12 @@
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
+    "build:pages": "ng build --configuration production --base-href /Masato-Martin-Portfolio/",
+    "build:pages:root": "ng build --configuration production --base-href /",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "preview:dist": "npx http-server ./dist/portfolio/browser -p 5050 -c-1",
+    "deploy:manual": "npx angular-cli-ghpages --dir=dist/portfolio/browser"
   },
   "private": true,
   "packageManager": "npm@11.11.0",
