@@ -354,7 +354,7 @@ h1 {
 
 .scroll-badge {
   align-items: center;
-  bottom: 2.5rem;
+  bottom: 1rem;
   color: var(--muted);
   display: flex;
   font-family: Consolas, 'Courier New', monospace;
@@ -362,6 +362,23 @@ h1 {
   gap: 0.6rem;
   left: 2.5rem;
   position: absolute;
+}
+
+#about {
+  text-align: center;
+}
+
+#about .section-label,
+#about .section-title {
+  text-align: center;
+}
+
+#about .about-grid {
+  margin: 0 auto;
+}
+
+#about .about-card {
+  text-align: left;
 }
 
 .scroll-line {
@@ -1130,6 +1147,10 @@ footer {
 
   .hc3 {
     right: 150px;
+  }
+
+  .scroll-badge {
+    display: none;
   }
 }
 
