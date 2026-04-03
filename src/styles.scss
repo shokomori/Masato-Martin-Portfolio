@@ -187,8 +187,8 @@ footer {
 
 .hero {
   position: relative;
-  min-height: 85dvh;
-  padding: 4rem 2.5rem;
+  min-height: 68dvh;
+  padding: 2.4rem 2.5rem 2rem;
 }
 
 .hero-grid {
@@ -473,6 +473,20 @@ section {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
+}
+
+.tech-chip {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+  padding: 0.34rem 0.7rem;
+}
+
+.tech-chip-logo {
+  border-radius: 3px;
+  height: 14px;
+  object-fit: contain;
+  width: 14px;
 }
 
 .skill-row {
@@ -1107,7 +1121,7 @@ footer {
 
   .hero {
     min-height: auto;
-    padding-bottom: 7rem;
+    padding-bottom: 3.5rem;
   }
 
   .hero-visual {
