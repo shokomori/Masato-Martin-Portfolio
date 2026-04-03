@@ -62,6 +62,8 @@ For more information on using the Angular CLI, including detailed command refere
 
 This project is prepared for GitHub Pages deployment.
 
+Last updated for GitHub Pages deployment trigger.
+
 ### Automatic deployment (recommended)
 
 1. Push this project to a GitHub repository.
