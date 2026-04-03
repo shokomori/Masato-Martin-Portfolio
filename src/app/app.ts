@@ -19,6 +19,18 @@ type NodePoint = {
   vy: number;
 };
 
+type ToastState = {
+  kind: 'success' | 'error';
+  message: string;
+};
+
+type CertificatePreview = {
+  title: string;
+  provider: string;
+  src: string;
+  alt: string;
+};
+
 @Component({
   selector: 'app-root',
   imports: [ReactiveFormsModule],
@@ -43,11 +55,15 @@ export class App implements AfterViewInit, OnDestroy {
   ];
   protected readonly activeSection = signal('about');
   protected readonly submitState = signal<SubmitState>('idle');
+  protected readonly scrollProgress = signal(0);
   protected readonly mouseX = signal(window.innerWidth / 2);
   protected readonly mouseY = signal(window.innerHeight / 2);
   protected readonly cursorInteractive = signal(false);
   protected readonly cursorPressed = signal(false);
   protected readonly cursorScrolling = signal(false);
+  protected readonly cursorNodeHot = signal(false);
+  protected readonly feedbackToast = signal<ToastState | null>(null);
+  protected readonly selectedCertificate = signal<CertificatePreview | null>(null);
 
   protected readonly contactForm = this.fb.group({
     name: ['', [Validators.required, Validators.minLength(2)]],
@@ -59,6 +75,8 @@ export class App implements AfterViewInit, OnDestroy {
   private readonly canvasNodes: NodePoint[] = [];
   private animationFrameId = 0;
   private scrollStopTimer = 0;
+  private feedbackToastTimer = 0;
+  private scrollMomentum = 0;
   private backgroundContext?: CanvasRenderingContext2D;
   private backgroundCanvas?: HTMLCanvasElement;
 
@@ -94,6 +112,16 @@ export class App implements AfterViewInit, OnDestroy {
   };
 
   private readonly handleScroll = (): void => {
+    const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
+    const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
+    const progress = Math.max(0, Math.min(100, (scrollTop / maxScroll) * 100));
+    const delta = scrollTop - (this.scrollProgress() / 100) * maxScroll;
+
+    this.scrollProgress.set(progress);
+    this.scrollMomentum = Math.max(-2.2, Math.min(2.2, this.scrollMomentum * 0.55 + delta * 0.01));
+    document.documentElement.style.setProperty('--scroll-progress', `${progress}`);
+    document.documentElement.style.setProperty('--scroll-momentum', `${this.scrollMomentum}`);
+
     this.cursorScrolling.set(true);
     if (this.scrollStopTimer) {
       window.clearTimeout(this.scrollStopTimer);
@@ -108,6 +136,29 @@ export class App implements AfterViewInit, OnDestroy {
       this.startBackgroundAnimation();
     }
   };
+
+  protected openCertificatePreview(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    const card = target?.closest('.cert-card');
+    const image = card?.querySelector('img');
+    const title = card?.querySelector('.cert-title')?.textContent?.trim();
+    const provider = card?.querySelector('.cert-provider')?.textContent?.trim();
+
+    if (!card || !image || !title || !provider) {
+      return;
+    }
+
+    this.selectedCertificate.set({
+      title,
+      provider,
+      src: image.getAttribute('src') ?? image.src,
+      alt: image.getAttribute('alt') ?? title,
+    });
+  }
+
+  protected closeCertificatePreview(): void {
+    this.selectedCertificate.set(null);
+  }
 
   ngAfterViewInit(): void {
     this.initializeBackground();
@@ -157,6 +208,9 @@ export class App implements AfterViewInit, OnDestroy {
     if (this.scrollStopTimer) {
       window.clearTimeout(this.scrollStopTimer);
     }
+    if (this.feedbackToastTimer) {
+      window.clearTimeout(this.feedbackToastTimer);
+    }
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = 0;
@@ -198,13 +252,19 @@ export class App implements AfterViewInit, OnDestroy {
 
       this.contactForm.reset();
       this.submitState.set('success');
+      this.showToast('success', 'Your message was sent. I will get back to you soon.');
     } catch {
       this.submitState.set('error');
+      this.showToast('error', 'Message could not be sent. Please email me directly.');
     }
   }
 
   protected isActive(sectionId: string): boolean {
     return this.activeSection() === sectionId;
+  }
+
+  protected setActiveSection(sectionId: string): void {
+    this.activeSection.set(sectionId);
   }
 
   private initializeBackground(): void {
@@ -223,6 +283,7 @@ export class App implements AfterViewInit, OnDestroy {
 
     this.resizeCanvas();
     this.buildNodes(canvas);
+    this.handleScroll();
 
     window.addEventListener('mousemove', this.handleMouseMove);
     window.addEventListener('resize', this.handleResize);
@@ -275,8 +336,16 @@ export class App implements AfterViewInit, OnDestroy {
 
     const pointerX = this.mouseX();
     const pointerY = this.mouseY();
+    const scrollMomentum = this.scrollMomentum;
+    const scrollLerp = this.scrollProgress() / 100;
+    let nodeHot = false;
+
+    context.save();
+    context.translate(0, Math.sin(scrollLerp * Math.PI) * 4);
 
     for (const node of this.canvasNodes) {
+      node.x += Math.sin((node.y + scrollLerp * 180) / 150) * scrollMomentum * 0.04;
+      node.y += scrollMomentum * 0.12;
       node.x += node.vx;
       node.y += node.vy;
 
@@ -292,6 +361,9 @@ export class App implements AfterViewInit, OnDestroy {
       const dx = node.x - pointerX;
       const dy = node.y - pointerY;
       const distance = Math.hypot(dx, dy);
+      if (distance < 34) {
+        nodeHot = true;
+      }
       if (distance < 120 && distance > 0) {
         const force = (120 - distance) / 1200;
         node.vx += (dx / distance) * force;
@@ -326,7 +398,8 @@ export class App implements AfterViewInit, OnDestroy {
         const distance = Math.hypot(a.x - b.x, a.y - b.y);
         if (distance < 150) {
           const alpha = 1 - distance / 150;
-          context.strokeStyle = `rgba(129, 189, 255, ${alpha * 0.2})`;
+          const boost = 1 + Math.min(1, Math.abs(scrollMomentum) / 2.2) * 0.9;
+          context.strokeStyle = `rgba(129, 189, 255, ${alpha * 0.2 * boost})`;
           context.beginPath();
           context.moveTo(a.x, a.y);
           context.lineTo(b.x, b.y);
@@ -336,10 +409,27 @@ export class App implements AfterViewInit, OnDestroy {
     }
 
     for (const node of this.canvasNodes) {
-      context.fillStyle = 'rgba(130, 228, 255, 0.75)';
+      const nodeGlow = 0.55 + Math.min(0.45, Math.abs(scrollMomentum) * 0.08);
+      context.fillStyle = `rgba(130, 228, 255, ${nodeGlow})`;
       context.beginPath();
       context.arc(node.x, node.y, 1.8, 0, Math.PI * 2);
       context.fill();
     }
+
+    if (this.cursorNodeHot() !== nodeHot) {
+      this.cursorNodeHot.set(nodeHot);
+    }
+
+    context.restore();
+  }
+
+  private showToast(kind: ToastState['kind'], message: string): void {
+    this.feedbackToast.set({ kind, message });
+    if (this.feedbackToastTimer) {
+      window.clearTimeout(this.feedbackToastTimer);
+    }
+    this.feedbackToastTimer = window.setTimeout(() => {
+      this.feedbackToast.set(null);
+    }, 3800);
   }
 }
