@@ -67,9 +67,9 @@ export class App implements AfterViewInit, OnDestroy {
   protected readonly submitState = signal<SubmitState>('idle');
   protected readonly activeParticleMode = signal<ParticleMode>('comet');
   protected readonly particleModes: ParticleModeOption[] = [
-    { id: 'constellation', label: 'Constellation', hint: 'Connected node network' },
-    { id: 'nebula', label: 'Nebula', hint: 'Soft drifting stardust' },
-    { id: 'comet', label: 'Comet Trail', hint: 'Fast streak motion' },
+    { id: 'constellation', label: 'Const', hint: 'Connected node network' },
+    { id: 'nebula', label: 'Neb', hint: 'Soft drifting stardust' },
+    { id: 'comet', label: 'Comet', hint: 'Fast streak motion' },
   ];
   protected readonly scrollProgress = signal(0);
   protected readonly mouseX = signal(window.innerWidth / 2);

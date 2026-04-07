@@ -8,6 +8,7 @@
         type="button"
         [class.is-active]="activeParticleMode() === mode.id"
         [attr.aria-pressed]="activeParticleMode() === mode.id"
+        [attr.aria-label]="mode.hint"
         [attr.title]="mode.hint"
         (click)="setParticleMode(mode.id)"
       >
