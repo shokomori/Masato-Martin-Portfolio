@@ -38,6 +38,65 @@ body {
   z-index: 0;
 }
 
+.particle-switcher {
+  align-items: center;
+  backdrop-filter: blur(12px);
+  background: rgba(10, 10, 15, 0.64);
+  border: 1px solid rgba(127, 106, 240, 0.25);
+  border-radius: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  padding: 0.5rem 0.6rem;
+  position: fixed;
+  right: 1.1rem;
+  top: 5.25rem;
+  z-index: 66;
+}
+
+.particle-switcher-label {
+  color: var(--muted);
+  font-family: 'Lucida Console', Monaco, Consolas, 'Courier New', monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.particle-switcher-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.particle-switcher-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(127, 106, 240, 0.22);
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: 'Lucida Console', Monaco, Consolas, 'Courier New', monospace;
+  font-size: 0.67rem;
+  letter-spacing: 0.03em;
+  min-height: 30px;
+  padding: 0.3rem 0.72rem;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.particle-switcher-btn:hover,
+.particle-switcher-btn:focus-visible {
+  border-color: rgba(61, 214, 163, 0.45);
+  color: var(--accent2);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.particle-switcher-btn.is-active {
+  background: linear-gradient(120deg, rgba(127, 106, 240, 0.26), rgba(61, 214, 163, 0.22));
+  border-color: rgba(61, 214, 163, 0.5);
+  color: #d8fff1;
+}
+
 .scroll-progress {
   background: linear-gradient(90deg, rgba(127, 106, 240, 0.15), rgba(61, 214, 163, 0.9), rgba(240, 112, 96, 0.9));
   box-shadow: 0 0 18px rgba(61, 214, 163, 0.22);
@@ -1387,6 +1446,12 @@ footer {
 @media (max-width: 780px) {
   .scroll-progress {
     top: 0;
+  }
+
+  .particle-switcher {
+    left: 1rem;
+    right: 1rem;
+    top: 5.1rem;
   }
 
   .site-nav,

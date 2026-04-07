@@ -12,11 +12,21 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 type SubmitState = 'idle' | 'submitting' | 'success' | 'error';
 
+type ParticleMode = 'constellation' | 'nebula' | 'comet';
+
 type NodePoint = {
   x: number;
   y: number;
   vx: number;
   vy: number;
+  size: number;
+  alpha: number;
+};
+
+type ParticleModeOption = {
+  id: ParticleMode;
+  label: string;
+  hint: string;
 };
 
 type ToastState = {
@@ -55,6 +65,12 @@ export class App implements AfterViewInit, OnDestroy {
   ];
   protected readonly activeSection = signal('about');
   protected readonly submitState = signal<SubmitState>('idle');
+  protected readonly activeParticleMode = signal<ParticleMode>('constellation');
+  protected readonly particleModes: ParticleModeOption[] = [
+    { id: 'constellation', label: 'Constellation', hint: 'Connected node network' },
+    { id: 'nebula', label: 'Nebula', hint: 'Soft drifting stardust' },
+    { id: 'comet', label: 'Comet Trail', hint: 'Fast streak motion' },
+  ];
   protected readonly scrollProgress = signal(0);
   protected readonly mouseX = signal(window.innerWidth / 2);
   protected readonly mouseY = signal(window.innerHeight / 2);
@@ -267,6 +283,18 @@ export class App implements AfterViewInit, OnDestroy {
     this.activeSection.set(sectionId);
   }
 
+  protected setParticleMode(mode: ParticleMode): void {
+    if (this.activeParticleMode() === mode) {
+      return;
+    }
+
+    this.activeParticleMode.set(mode);
+    const canvas = this.backgroundCanvas ?? this.bgCanvas?.nativeElement;
+    if (canvas) {
+      this.buildNodes(canvas);
+    }
+  }
+
   private initializeBackground(): void {
     const canvas = this.bgCanvas?.nativeElement;
     if (!canvas) {
@@ -319,20 +347,37 @@ export class App implements AfterViewInit, OnDestroy {
 
   private buildNodes(canvas: HTMLCanvasElement): void {
     this.canvasNodes.length = 0;
-    const count = Math.min(80, Math.max(36, Math.floor(canvas.width / 24)));
+    const mode = this.activeParticleMode();
+    const count =
+      mode === 'nebula'
+        ? Math.min(64, Math.max(28, Math.floor(canvas.width / 30)))
+        : mode === 'comet'
+          ? Math.min(120, Math.max(54, Math.floor(canvas.width / 20)))
+          : Math.min(80, Math.max(36, Math.floor(canvas.width / 24)));
+    const velocityFactor = mode === 'comet' ? 0.55 : mode === 'nebula' ? 0.22 : 0.35;
+    const baseSize = mode === 'nebula' ? 2.2 : mode === 'comet' ? 1.5 : 1.8;
 
     for (let i = 0; i < count; i += 1) {
       this.canvasNodes.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.35,
-        vy: (Math.random() - 0.5) * 0.35,
+        vx: (Math.random() - 0.5) * velocityFactor,
+        vy: (Math.random() - 0.5) * velocityFactor,
+        size: baseSize + Math.random() * (mode === 'nebula' ? 2 : 0.9),
+        alpha: 0.45 + Math.random() * 0.55,
       });
     }
   }
 
   private drawFrame(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    context.clearRect(0, 0, canvas.width, canvas.height);
+    const mode = this.activeParticleMode();
+
+    if (mode === 'comet') {
+      context.fillStyle = 'rgba(10, 10, 15, 0.16)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    } else {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+    }
 
     const pointerX = this.mouseX();
     const pointerY = this.mouseY();
@@ -343,9 +388,20 @@ export class App implements AfterViewInit, OnDestroy {
     context.save();
     context.translate(0, Math.sin(scrollLerp * Math.PI) * 4);
 
+    if (mode === 'nebula') {
+      const nebulaGradient = context.createRadialGradient(pointerX, pointerY, 20, pointerX, pointerY, 180);
+      nebulaGradient.addColorStop(0, 'rgba(127, 106, 240, 0.08)');
+      nebulaGradient.addColorStop(1, 'rgba(127, 106, 240, 0)');
+      context.fillStyle = nebulaGradient;
+      context.beginPath();
+      context.arc(pointerX, pointerY, 180, 0, Math.PI * 2);
+      context.fill();
+    }
+
     for (const node of this.canvasNodes) {
-      node.x += Math.sin((node.y + scrollLerp * 180) / 150) * scrollMomentum * 0.04;
-      node.y += scrollMomentum * 0.12;
+      const scrollShift = mode === 'comet' ? 0.2 : mode === 'nebula' ? 0.08 : 0.12;
+      node.x += Math.sin((node.y + scrollLerp * 180) / 150) * scrollMomentum * (mode === 'nebula' ? 0.02 : 0.04);
+      node.y += scrollMomentum * scrollShift;
       node.x += node.vx;
       node.y += node.vy;
 
@@ -361,27 +417,29 @@ export class App implements AfterViewInit, OnDestroy {
       const dx = node.x - pointerX;
       const dy = node.y - pointerY;
       const distance = Math.hypot(dx, dy);
-      if (distance < 34) {
+      if (distance < (mode === 'nebula' ? 48 : 34)) {
         nodeHot = true;
       }
-      if (distance < 120 && distance > 0) {
-        const force = (120 - distance) / 1200;
+      const interactionRadius = mode === 'nebula' ? 180 : mode === 'comet' ? 100 : 120;
+      if (distance < interactionRadius && distance > 0) {
+        const force = (interactionRadius - distance) / (mode === 'comet' ? 1400 : 1200);
         node.vx += (dx / distance) * force;
         node.vy += (dy / distance) * force;
       }
 
-      node.vx += (Math.random() - 0.5) * 0.01;
-      node.vy += (Math.random() - 0.5) * 0.01;
-      node.vx *= 0.995;
-      node.vy *= 0.995;
+      node.vx += (Math.random() - 0.5) * (mode === 'nebula' ? 0.007 : 0.01);
+      node.vy += (Math.random() - 0.5) * (mode === 'nebula' ? 0.007 : 0.01);
+      node.vx *= mode === 'comet' ? 0.992 : 0.995;
+      node.vy *= mode === 'comet' ? 0.992 : 0.995;
 
       const speed = Math.hypot(node.vx, node.vy);
-      if (speed < 0.05) {
+      if (speed < (mode === 'nebula' ? 0.03 : 0.05)) {
         const angle = Math.random() * Math.PI * 2;
-        node.vx = Math.cos(angle) * 0.08;
-        node.vy = Math.sin(angle) * 0.08;
+        const minSpeed = mode === 'comet' ? 0.12 : 0.08;
+        node.vx = Math.cos(angle) * minSpeed;
+        node.vy = Math.sin(angle) * minSpeed;
       }
-      if (speed > 0.65) {
+      if (speed > (mode === 'comet' ? 0.95 : 0.65)) {
         node.vx *= 0.9;
         node.vy *= 0.9;
       }
@@ -390,29 +448,60 @@ export class App implements AfterViewInit, OnDestroy {
       node.y = Math.max(0, Math.min(canvas.height, node.y));
     }
 
-    context.lineWidth = 0.6;
-    for (let i = 0; i < this.canvasNodes.length; i += 1) {
-      for (let j = i + 1; j < this.canvasNodes.length; j += 1) {
-        const a = this.canvasNodes[i];
-        const b = this.canvasNodes[j];
-        const distance = Math.hypot(a.x - b.x, a.y - b.y);
-        if (distance < 150) {
-          const alpha = 1 - distance / 150;
-          const boost = 1 + Math.min(1, Math.abs(scrollMomentum) / 2.2) * 0.9;
-          context.strokeStyle = `rgba(129, 189, 255, ${alpha * 0.2 * boost})`;
-          context.beginPath();
-          context.moveTo(a.x, a.y);
-          context.lineTo(b.x, b.y);
-          context.stroke();
+    if (mode !== 'nebula') {
+      const maxDistance = mode === 'comet' ? 95 : 150;
+      context.lineWidth = mode === 'comet' ? 0.45 : 0.6;
+      for (let i = 0; i < this.canvasNodes.length; i += 1) {
+        for (let j = i + 1; j < this.canvasNodes.length; j += 1) {
+          const a = this.canvasNodes[i];
+          const b = this.canvasNodes[j];
+          const distance = Math.hypot(a.x - b.x, a.y - b.y);
+          if (distance < maxDistance) {
+            const alpha = 1 - distance / maxDistance;
+            const boost = 1 + Math.min(1, Math.abs(scrollMomentum) / 2.2) * 0.9;
+            context.strokeStyle =
+              mode === 'comet'
+                ? `rgba(240, 112, 96, ${alpha * 0.22 * boost})`
+                : `rgba(129, 189, 255, ${alpha * 0.2 * boost})`;
+            context.beginPath();
+            context.moveTo(a.x, a.y);
+            context.lineTo(b.x, b.y);
+            context.stroke();
+          }
         }
       }
     }
 
     for (const node of this.canvasNodes) {
-      const nodeGlow = 0.55 + Math.min(0.45, Math.abs(scrollMomentum) * 0.08);
-      context.fillStyle = `rgba(130, 228, 255, ${nodeGlow})`;
+      const motionBoost = Math.min(0.45, Math.abs(scrollMomentum) * 0.08);
+
+      if (mode === 'nebula') {
+        context.fillStyle = `rgba(129, 189, 255, ${(0.18 + motionBoost) * node.alpha})`;
+        context.beginPath();
+        context.arc(node.x, node.y, node.size * 2.1, 0, Math.PI * 2);
+        context.fill();
+        context.fillStyle = `rgba(61, 214, 163, ${(0.08 + motionBoost * 0.6) * node.alpha})`;
+        context.beginPath();
+        context.arc(node.x, node.y, node.size, 0, Math.PI * 2);
+        context.fill();
+        continue;
+      }
+
+      if (mode === 'comet') {
+        const tailLength = Math.min(16, Math.hypot(node.vx, node.vy) * 26 + 4);
+        context.strokeStyle = `rgba(240, 112, 96, ${(0.26 + motionBoost) * node.alpha})`;
+        context.lineWidth = Math.max(0.8, node.size * 0.55);
+        context.beginPath();
+        context.moveTo(node.x, node.y);
+        context.lineTo(node.x - node.vx * tailLength, node.y - node.vy * tailLength);
+        context.stroke();
+      }
+
+      const nodeGlow = 0.55 + motionBoost;
+      const baseColor = mode === 'comet' ? '240, 112, 96' : '130, 228, 255';
+      context.fillStyle = `rgba(${baseColor}, ${nodeGlow * node.alpha})`;
       context.beginPath();
-      context.arc(node.x, node.y, 1.8, 0, Math.PI * 2);
+      context.arc(node.x, node.y, node.size, 0, Math.PI * 2);
       context.fill();
     }
 

@@ -1,4 +1,21 @@
 <canvas #bgCanvas class="background-canvas" aria-hidden="true"></canvas>
+<div class="particle-switcher" role="group" aria-label="Background effect styles">
+  <p class="particle-switcher-label">Background FX</p>
+  <div class="particle-switcher-list">
+    @for (mode of particleModes; track mode.id) {
+      <button
+        class="particle-switcher-btn"
+        type="button"
+        [class.is-active]="activeParticleMode() === mode.id"
+        [attr.aria-pressed]="activeParticleMode() === mode.id"
+        [attr.title]="mode.hint"
+        (click)="setParticleMode(mode.id)"
+      >
+        {{ mode.label }}
+      </button>
+    }
+  </div>
+</div>
 <div
   class="cursor-glow"
   [class.is-node-hot]="cursorNodeHot()"
