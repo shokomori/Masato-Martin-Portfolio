@@ -39,13 +39,13 @@ body {
 }
 
 .particle-switcher {
-  align-items: center;
+  align-items: flex-start;
   backdrop-filter: blur(12px);
   background: rgba(10, 10, 15, 0.64);
   border: 1px solid rgba(127, 106, 240, 0.25);
   border-radius: 14px;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.55rem;
   padding: 0.5rem 0.6rem;
   position: fixed;
@@ -65,8 +65,9 @@ body {
 
 .particle-switcher-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.4rem;
+  width: 100%;
 }
 
 .particle-switcher-btn {
@@ -79,7 +80,9 @@ body {
   font-size: 0.67rem;
   letter-spacing: 0.03em;
   min-height: 30px;
+  min-width: 132px;
   padding: 0.3rem 0.72rem;
+  text-align: left;
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
 

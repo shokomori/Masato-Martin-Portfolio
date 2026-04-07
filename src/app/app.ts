@@ -65,7 +65,7 @@ export class App implements AfterViewInit, OnDestroy {
   ];
   protected readonly activeSection = signal('about');
   protected readonly submitState = signal<SubmitState>('idle');
-  protected readonly activeParticleMode = signal<ParticleMode>('constellation');
+  protected readonly activeParticleMode = signal<ParticleMode>('comet');
   protected readonly particleModes: ParticleModeOption[] = [
     { id: 'constellation', label: 'Constellation', hint: 'Connected node network' },
     { id: 'nebula', label: 'Nebula', hint: 'Soft drifting stardust' },
