@@ -106,6 +106,7 @@ export class App implements AfterViewInit, OnDestroy {
   });
 
   private observer?: IntersectionObserver;
+  private sectionElements: HTMLElement[] = [];
   private readonly canvasNodes: NodePoint[] = [];
   private animationFrameId = 0;
   private scrollStopTimer = 0;
@@ -155,6 +156,7 @@ export class App implements AfterViewInit, OnDestroy {
     this.scrollMomentum = Math.max(-2.2, Math.min(2.2, this.scrollMomentum * 0.55 + delta * 0.01));
     document.documentElement.style.setProperty('--scroll-progress', `${progress}`);
     document.documentElement.style.setProperty('--scroll-momentum', `${this.scrollMomentum}`);
+    this.syncActiveSectionWithViewport();
 
     this.cursorScrolling.set(true);
     if (this.scrollStopTimer) {
@@ -231,18 +233,13 @@ export class App implements AfterViewInit, OnDestroy {
     const sections = this.navSections
       .map((id) => document.getElementById(id))
       .filter((section): section is HTMLElement => section !== null);
+    this.sectionElements = sections;
 
     this.observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            this.activeSection.set(entry.target.id);
-          }
-        }
-      },
+      () => this.syncActiveSectionWithViewport(),
       {
-        threshold: 0.45,
-        rootMargin: '-80px 0px -30% 0px',
+        threshold: [0, 0.15, 0.3],
+        rootMargin: '-86px 0px -55% 0px',
       },
     );
 
@@ -250,6 +247,7 @@ export class App implements AfterViewInit, OnDestroy {
       this.observer.observe(section);
     }
 
+    this.syncActiveSectionWithViewport();
     this.applyCertificationFilter();
   }
 
@@ -561,6 +559,32 @@ export class App implements AfterViewInit, OnDestroy {
     this.feedbackToastTimer = window.setTimeout(() => {
       this.feedbackToast.set(null);
     }, 3800);
+  }
+
+  private syncActiveSectionWithViewport(): void {
+    if (!this.sectionElements.length) {
+      return;
+    }
+
+    const anchorY = 110;
+    let active: HTMLElement | null = null;
+
+    for (const section of this.sectionElements) {
+      const rect = section.getBoundingClientRect();
+      if (rect.top <= anchorY && rect.bottom > anchorY) {
+        active = section;
+      }
+    }
+
+    if (!active) {
+      active =
+        this.sectionElements.find((section) => section.getBoundingClientRect().top > anchorY) ??
+        this.sectionElements[this.sectionElements.length - 1];
+    }
+
+    if (active && this.activeSection() !== active.id) {
+      this.activeSection.set(active.id);
+    }
   }
 
   private inferCertificationCategory(card: HTMLElement): CertificationCategory {
