@@ -1,10 +1,13 @@
 <canvas #bgCanvas class="background-canvas" aria-hidden="true"></canvas>
 <div class="particle-switcher" role="group" aria-label="Background effect styles">
-  <p class="particle-switcher-label">Background FX</p>
+  <p class="particle-switcher-label">FX</p>
   <div class="particle-switcher-list">
     @for (mode of particleModes; track mode.id) {
       <button
         class="particle-switcher-btn"
+        [class.mode-const]="mode.id === 'constellation'"
+        [class.mode-neb]="mode.id === 'nebula'"
+        [class.mode-comet]="mode.id === 'comet'"
         type="button"
         [class.is-active]="activeParticleMode() === mode.id"
         [attr.aria-pressed]="activeParticleMode() === mode.id"
@@ -58,14 +61,13 @@
       </a>
     }
   </div>
-  <a
+  <button
     class="nav-cta"
-    href="masato_cv_v3.pdf"
-    target="_blank"
-    rel="noopener"
+    type="button"
+    (click)="openResumeModal()"
   >
     resume
-  </a>
+  </button>
 </nav>
 
 @if (feedbackToast()) {
@@ -376,6 +378,19 @@
 <section id="certifications" aria-labelledby="certifications-title">
   <p class="section-label">CERTIFICATIONS</p>
   <h2 id="certifications-title" class="section-title">Licenses and Certifications</h2>
+  <div class="cert-filter-row">
+    <label class="cert-filter-label" for="cert-category">Category</label>
+    <select
+      id="cert-category"
+      class="cert-filter-select"
+      [value]="selectedCertificationCategory()"
+      (change)="onCertificationCategoryChange($event)"
+    >
+      @for (category of certificationCategories; track category.id) {
+        <option [value]="category.id">{{ category.label }}</option>
+      }
+    </select>
+  </div>
   <div class="cert-grid" (click)="openCertificatePreview($event)">
     <article class="cert-card">
       <p class="cert-provider">Amazon Web Services (AWS)</p>
@@ -634,6 +649,18 @@
       <p class="cert-modal-provider">{{ selectedCertificate()?.provider }}</p>
       <h3 class="cert-modal-title">{{ selectedCertificate()?.title }}</h3>
       <img class="cert-modal-image" [src]="selectedCertificate()?.src" [alt]="selectedCertificate()?.alt" />
+    </div>
+  </div>
+}
+
+@if (isResumeModalOpen()) {
+  <div class="cert-modal-backdrop" role="presentation" (click)="closeResumeModal()">
+    <div class="cert-modal resume-modal" role="dialog" aria-modal="true" aria-label="Resume preview" (click)="$event.stopPropagation()">
+      <button type="button" class="cert-modal-close" aria-label="Close resume preview" (click)="closeResumeModal()">×</button>
+      <p class="cert-modal-provider">Resume</p>
+      <h3 class="cert-modal-title">Masato Martin - CV</h3>
+      <iframe class="resume-modal-frame" src="masato_cv_v3.pdf#view=FitH" title="Masato Martin resume preview"></iframe>
+      <a class="proj-link" href="masato_cv_v3.pdf" target="_blank" rel="noopener">Open in new tab</a>
     </div>
   </div>
 }

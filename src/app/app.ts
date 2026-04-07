@@ -29,6 +29,13 @@ type ParticleModeOption = {
   hint: string;
 };
 
+type CertificationCategory = 'all' | 'cloud' | 'uiux' | 'ai' | 'game' | 'web' | 'pm';
+
+type CertificationCategoryOption = {
+  id: CertificationCategory;
+  label: string;
+};
+
 type ToastState = {
   kind: 'success' | 'error';
   message: string;
@@ -67,9 +74,9 @@ export class App implements AfterViewInit, OnDestroy {
   protected readonly submitState = signal<SubmitState>('idle');
   protected readonly activeParticleMode = signal<ParticleMode>('comet');
   protected readonly particleModes: ParticleModeOption[] = [
-    { id: 'constellation', label: 'Const', hint: 'Connected node network' },
-    { id: 'nebula', label: 'Neb', hint: 'Soft drifting stardust' },
-    { id: 'comet', label: 'Comet', hint: 'Fast streak motion' },
+    { id: 'constellation', label: '1', hint: 'Connected node network' },
+    { id: 'nebula', label: '2', hint: 'Soft drifting stardust' },
+    { id: 'comet', label: '3', hint: 'Fast streak motion' },
   ];
   protected readonly scrollProgress = signal(0);
   protected readonly mouseX = signal(window.innerWidth / 2);
@@ -80,6 +87,17 @@ export class App implements AfterViewInit, OnDestroy {
   protected readonly cursorNodeHot = signal(false);
   protected readonly feedbackToast = signal<ToastState | null>(null);
   protected readonly selectedCertificate = signal<CertificatePreview | null>(null);
+  protected readonly selectedCertificationCategory = signal<CertificationCategory>('all');
+  protected readonly certificationCategories: CertificationCategoryOption[] = [
+    { id: 'all', label: 'All Categories' },
+    { id: 'cloud', label: 'Cloud' },
+    { id: 'uiux', label: 'UI/UX' },
+    { id: 'ai', label: 'AI/Data' },
+    { id: 'game', label: 'Game' },
+    { id: 'web', label: 'Web/Dev' },
+    { id: 'pm', label: 'PM' },
+  ];
+  protected readonly isResumeModalOpen = signal(false);
 
   protected readonly contactForm = this.fb.group({
     name: ['', [Validators.required, Validators.minLength(2)]],
@@ -176,6 +194,27 @@ export class App implements AfterViewInit, OnDestroy {
     this.selectedCertificate.set(null);
   }
 
+  protected onCertificationCategoryChange(event: Event): void {
+    const target = event.target as HTMLSelectElement | null;
+    const value = target?.value as CertificationCategory | undefined;
+    const allowed = new Set<CertificationCategory>(['all', 'cloud', 'uiux', 'ai', 'game', 'web', 'pm']);
+
+    if (!value || !allowed.has(value)) {
+      return;
+    }
+
+    this.selectedCertificationCategory.set(value);
+    this.applyCertificationFilter();
+  }
+
+  protected openResumeModal(): void {
+    this.isResumeModalOpen.set(true);
+  }
+
+  protected closeResumeModal(): void {
+    this.isResumeModalOpen.set(false);
+  }
+
   ngAfterViewInit(): void {
     this.initializeBackground();
 
@@ -210,6 +249,8 @@ export class App implements AfterViewInit, OnDestroy {
     for (const section of sections) {
       this.observer.observe(section);
     }
+
+    this.applyCertificationFilter();
   }
 
   ngOnDestroy(): void {
@@ -520,5 +561,50 @@ export class App implements AfterViewInit, OnDestroy {
     this.feedbackToastTimer = window.setTimeout(() => {
       this.feedbackToast.set(null);
     }, 3800);
+  }
+
+  private inferCertificationCategory(card: HTMLElement): CertificationCategory {
+    const provider = card.querySelector('.cert-provider')?.textContent?.toLowerCase() ?? '';
+    const title = card.querySelector('.cert-title')?.textContent?.toLowerCase() ?? '';
+    const combined = `${provider} ${title}`;
+
+    if (combined.includes('ux') || combined.includes('wireframe') || combined.includes('figma') || combined.includes('ui')) {
+      return 'uiux';
+    }
+
+    if (combined.includes('cloud') || combined.includes('aws') || combined.includes('google cloud')) {
+      return 'cloud';
+    }
+
+    if (
+      combined.includes('ai') ||
+      combined.includes('data science') ||
+      combined.includes('generative') ||
+      combined.includes('blockchain')
+    ) {
+      return 'ai';
+    }
+
+    if (combined.includes('project management')) {
+      return 'pm';
+    }
+
+    if (combined.includes('unreal') || combined.includes('game')) {
+      return 'game';
+    }
+
+    return 'web';
+  }
+
+  private applyCertificationFilter(): void {
+    const selected = this.selectedCertificationCategory();
+    const cards = document.querySelectorAll<HTMLElement>('.cert-grid .cert-card');
+
+    for (const card of cards) {
+      const category = this.inferCertificationCategory(card);
+      const shouldShow = selected === 'all' || category === selected;
+      card.classList.toggle('is-filtered-out', !shouldShow);
+      card.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
+    }
   }
 }
