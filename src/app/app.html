@@ -66,7 +66,7 @@
     type="button"
     (click)="openResumeModal()"
   >
-    resume
+    Resume
   </button>
 </nav>
 
@@ -86,16 +86,18 @@
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-grid">
       <div>
-        <p class="hero-tag">CS Student | Fullstack Dev | UI UX Designer | AWS Co-Lead</p>
+        <p class="hero-tag">CS Student | Full-Stack Developer | UI/UX Designer | AWS Co-Lead</p>
         <h1 id="hero-title">
           <span>Code.</span>
           <span class="line-muted">Creativity.</span>
           <span class="line-accent">Community.</span>
         </h1>
         <p class="hero-sub">
-          I build systems, stories, and experiences from reactive Angular apps to cloud-native
-          AWS solutions and immersive game worlds.
+          I design and ship full-stack products that blend clean engineering, thoughtful UX, and
+          cloud-native architecture, from Angular interfaces to AWS-backed systems and interactive
+          digital experiences.
         </p>
+        <p class="hero-target">Actively seeking full-stack and cloud engineering internship opportunities.</p>
         <div class="hero-btns">
           <a class="btn-primary" href="#projects">View Projects</a>
           <a class="btn-secondary" href="#contact">Get In Touch</a>
@@ -255,121 +257,48 @@
   <p class="section-label">PROJECTS</p>
   <h2 id="projects-title" class="section-title">Verified Projects and Builds</h2>
   <div class="proj-grid">
-    <article class="proj-card">
-      <div class="proj-thumb pt-purple">WEB APP</div>
-      <div class="proj-body">
-        <h3 class="proj-title">Bataan Campus Finder</h3>
-        <p class="proj-desc">
-          A web-based campus discovery platform for exploring and locating educational institutions
-          in Bataan with clean, practical UX.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-purple">Interactive Discovery</span>
-          <span class="chip chip-green">Location Aware</span>
-          <span class="chip chip-coral">Accessible UI</span>
+    @for (project of projects; track project.title) {
+      <article class="proj-card">
+        <div
+          class="proj-thumb"
+          [class.pt-purple]="project.typeClass === 'pt-purple'"
+          [class.pt-green]="project.typeClass === 'pt-green'"
+          [class.pt-coral]="project.typeClass === 'pt-coral'"
+        >
+          {{ project.type }}
         </div>
-        <a class="proj-link" href="https://shokomori.github.io/Bataan-Campus-Finder/" target="_blank" rel="noopener">Open Live Project</a>
-      </div>
-    </article>
-
-    <article class="proj-card">
-      <div class="proj-thumb pt-green">AI/ML</div>
-      <div class="proj-body">
-        <h3 class="proj-title">Helpify-AI</h3>
-        <p class="proj-desc">
-          An AI-powered support system that classifies user intent and improves responses over
-          time through a full machine learning pipeline.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-green">Text-CNN</span>
-          <span class="chip chip-green">Reinforcement Learning</span>
-          <span class="chip chip-purple">Scalable ML Pipeline</span>
+        <div class="proj-body">
+          <h3 class="proj-title">{{ project.title }}</h3>
+          <p class="proj-desc">{{ project.description }}</p>
+          <div class="proj-tags">
+            @for (tag of project.tags; track tag.label) {
+              <span
+                class="chip"
+                [class.chip-purple]="tag.className === 'chip-purple'"
+                [class.chip-green]="tag.className === 'chip-green'"
+                [class.chip-coral]="tag.className === 'chip-coral'"
+              >
+                {{ tag.label }}
+              </span>
+            }
+          </div>
+          @if (project.metrics.length) {
+            <div class="proj-metrics" aria-label="Project metrics">
+              @for (metric of project.metrics; track metric) {
+                <p class="proj-metric">{{ metric }}</p>
+              }
+            </div>
+          }
+          @if (project.ctas.length) {
+            <div class="proj-cta-row" aria-label="Project links">
+              @for (cta of project.ctas; track cta.url) {
+                <a class="proj-link" [href]="cta.url" target="_blank" rel="noopener">{{ cta.label }}</a>
+              }
+            </div>
+          }
         </div>
-        <a class="proj-link" href="https://github.com/shokomori/Helpify-AI" target="_blank" rel="noopener">View on GitHub</a>
-      </div>
-    </article>
-
-    <article class="proj-card">
-      <div class="proj-thumb pt-coral">STARTUP</div>
-      <div class="proj-body">
-        <h3 class="proj-title">VirtuoHero</h3>
-        <p class="proj-desc">
-          A mobile-first AI platform helping Filipino freelancers and students build skills,
-          consistency, and career readiness. My strongest startup-level project.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-coral">Personalized Learning</span>
-          <span class="chip chip-coral">Habit Building</span>
-          <span class="chip chip-green">Career Tracking</span>
-        </div>
-        <a class="proj-link" href="https://github.com/shokomori/Virtuo-Hero" target="_blank" rel="noopener">View on GitHub</a>
-      </div>
-    </article>
-
-    <article class="proj-card">
-      <div class="proj-thumb pt-purple">CREATIVE</div>
-      <div class="proj-body">
-        <h3 class="proj-title">JeepBoxHero</h3>
-        <p class="proj-desc">
-          A Filipino-inspired interactive software concept that blends cultural themes with
-          creative system and experience design.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-purple">Cultural Product Design</span>
-          <span class="chip chip-coral">Interactive Systems</span>
-          <span class="chip chip-green">Creative Engineering</span>
-        </div>
-        <a class="proj-link" href="https://github.com/shokomori/JeepBoxHero" target="_blank" rel="noopener">View on GitHub</a>
-      </div>
-    </article>
-
-    <article class="proj-card">
-      <div class="proj-thumb pt-green">FULL STACK</div>
-      <div class="proj-body">
-        <h3 class="proj-title">Task Tracker (Full-Stack App)</h3>
-        <p class="proj-desc">
-          A production-style task manager built with full CRUD, REST API integration, and clean
-          architecture across frontend, backend, and database layers.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-green">Angular</span>
-          <span class="chip chip-green">ASP.NET Core Web API</span>
-          <span class="chip chip-coral">SQL Server / ADO.NET</span>
-        </div>
-      </div>
-    </article>
-
-    <article class="proj-card">
-      <div class="proj-thumb pt-coral">SHOWCASE</div>
-      <div class="proj-body">
-        <h3 class="proj-title">Angular Portfolio Website</h3>
-        <p class="proj-desc">
-          A reactive portfolio experience with dynamic effects, hover interactions, and modern UX
-          storytelling to showcase technical depth.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-coral">Reactive UI</span>
-          <span class="chip chip-purple">Motion Effects</span>
-          <span class="chip chip-green">Modern UX</span>
-        </div>
-      </div>
-    </article>
-
-    <article class="proj-card">
-      <div class="proj-thumb pt-purple">UI LAB</div>
-      <div class="proj-body">
-        <h3 class="proj-title">Analog + Digital Clock UI</h3>
-        <p class="proj-desc">
-          A polished clock interface combining animated analog and digital displays, theme
-          switching, and timezone support.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-purple">HTML/CSS/JS</span>
-          <span class="chip chip-coral">Animation</span>
-          <span class="chip chip-green">Timezone Support</span>
-        </div>
-      </div>
-    </article>
+      </article>
+    }
   </div>
 </section>
 
@@ -390,256 +319,72 @@
         <option [value]="category.id">{{ category.label }}</option>
       }
     </select>
+    <label class="cert-filter-label" for="cert-sort">Sort</label>
+    <select
+      id="cert-sort"
+      class="cert-filter-select"
+      [value]="selectedCertificationSort()"
+      (change)="onCertificationSortChange($event)"
+    >
+      @for (sortOption of certificationSortOptions; track sortOption.id) {
+        <option [value]="sortOption.id">{{ sortOption.label }}</option>
+      }
+    </select>
+    <span class="cert-filter-label">Layout</span>
+    <div class="cert-layout-toggle" role="group" aria-label="Certification layout style">
+      @for (layout of certificationLayoutOptions; track layout.id) {
+        <button
+          type="button"
+          class="cert-layout-btn"
+          [class.is-active]="selectedCertificationLayout() === layout.id"
+          [attr.aria-pressed]="selectedCertificationLayout() === layout.id"
+          (click)="setCertificationLayout(layout.id)"
+        >
+          {{ layout.label }}
+        </button>
+      }
+    </div>
   </div>
-  <div class="cert-grid" (click)="openCertificatePreview($event)">
-    <article class="cert-card">
-      <p class="cert-provider">Amazon Web Services (AWS)</p>
-      <h3 class="cert-title">AWS Academy Graduate - Cloud Foundations - Training Badge</h3>
-      <p class="cert-meta">Issued Mar 2026</p>
-      <div class="cert-thumb"><img src="certificates/AWS Academy Graduate - Cloud Foundations - Training Badge.jpg" alt="AWS Academy Graduate - Cloud Foundations certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
+  <div class="cert-grid" [class.is-bento]="selectedCertificationLayout() === 'bento'">
+    @for (certificate of visibleCertifications(); track certificate.title) {
+      <article class="cert-card">
+        <p class="cert-provider">{{ certificate.provider }}</p>
+        <h3 class="cert-title">{{ certificate.title }}</h3>
+        <p class="cert-meta">{{ certificate.meta }}</p>
+        @if (certificate.imageSrc) {
+          <button
+            type="button"
+            class="cert-thumb cert-thumb-btn"
+            [attr.aria-label]="'Open certificate preview for ' + certificate.title"
+            [attr.title]="'Open certificate preview for ' + certificate.title"
+            (click)="openCertificatePreview(certificate)"
+          >
+            <span class="sr-only">Open certificate preview</span>
+            <img
+              [src]="certificate.imageSrc"
+              [alt]="certificate.imageAlt || (certificate.title + ' certificate')"
+              title="Certificate image"
+            />
+          </button>
+        } @else {
+          <div class="cert-thumb" [attr.aria-label]="certificate.placeholderText || 'Certificate image placeholder'">
+            {{ certificate.placeholderText }}
+          </div>
+        }
 
-    <article class="cert-card">
-      <p class="cert-provider">Google</p>
-      <h3 class="cert-title">Conduct UX Research and Test Early Concepts</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID 5AEYNNH6371Z</p>
-      <div class="cert-thumb"><img src="certificates/Conduct UX Research and Test Early Concepts.jpg" alt="Conduct UX Research and Test Early Concepts certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Google</p>
-      <h3 class="cert-title">Build Wireframes and Low-Fidelity Prototypes</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID HAAMB2503Z2N</p>
-      <div class="cert-thumb"><img src="certificates/Build Wireframes and Low-Fidelity Prototypes.jpg" alt="Build Wireframes and Low-Fidelity Prototypes certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Google</p>
-      <h3 class="cert-title">Start the UX Design Process: Empathize, Define, and Ideate</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID ITYLABNBOP7W</p>
-      <div class="cert-thumb"><img src="certificates/Start the UX Design Process Empathize, Define, and Ideate.jpg" alt="Start the UX Design Process certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Google</p>
-      <h3 class="cert-title">Foundations of User Experience (UX) Design</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID EFN605CXGSBK</p>
-      <div class="cert-thumb"><img src="certificates/Foundations of User Experience (UX) Design.jpg" alt="Foundations of UX Design certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Google</p>
-      <h3 class="cert-title">Build Dynamic User Interfaces (UI) for Websites</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID QP3OISPYOJ51</p>
-      <div class="cert-thumb"><img src="certificates/Build Dynamic User Interfaces (UI) for Websites.jpg" alt="Build Dynamic UIs certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Google</p>
-      <h3 class="cert-title">Foundations of Project Management</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID PYK2VA0O4F5Q</p>
-      <div class="cert-thumb"><img src="certificates/Foundations of Project Management.jpg" alt="Foundations of Project Management certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Developing AI Applications with Python and Flask</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID VY8DZMCC263Z</p>
-      <div class="cert-thumb"><img src="certificates/Developing AI Applications with Python and Flask.jpg" alt="Developing AI Applications with Python and Flask certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Python for Data Science, AI and Development</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID V0B9YL9MBFUE</p>
-      <div class="cert-thumb"><img src="certificates/Python for Data Science, AI & Development.jpg" alt="Python for Data Science, AI and Development certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Amazon Web Services (AWS)</p>
-      <h3 class="cert-title">AWS Services Overview for IT Professionals</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID JE8MTYANIJJC</p>
-      <div class="cert-thumb"><img src="certificates/AWS Services Overview for IT Professionals.jpg" alt="AWS Services Overview for IT Professionals certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Developing Back-End Apps with Node.js and Express</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID MZXY0K1W3FSP</p>
-      <div class="cert-thumb"><img src="certificates/Developing Back-End Apps with Node.js and Express.jpg" alt="Developing Back-End Apps with Node.js and Express certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Developing Front-End Apps with React</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID 9BRNXFNJYE6I</p>
-      <div class="cert-thumb"><img src="certificates/Developing Front-End Apps with React.jpg" alt="Developing Front-End Apps with React certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Getting Started with Git and GitHub</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID B1YF8UY5Z50H</p>
-      <div class="cert-thumb"><img src="certificates/Getting Started with Git and GitHub.jpg" alt="Getting Started with Git and GitHub certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Introduction to HTML, CSS, and JavaScript</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID FRUCYPR8SNB7</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to HTML, CSS, & JavaScript.jpg" alt="Introduction to HTML, CSS, and JavaScript certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Introduction to Cloud Computing</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID TWRJZ8H6IJF1</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to Cloud Computing.jpg" alt="Introduction to Cloud Computing certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Introduction to Software Engineering</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID RIQAEAP5OA5Q</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to Software Engineering.jpg" alt="Introduction to Software Engineering certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Google Cloud Training Online</p>
-      <h3 class="cert-title">Innovating with Google Cloud AI</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Innovating with Google Cloud AI.jpg" alt="Innovating with Google Cloud AI certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Project Management 101</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Project Management 101.jpg" alt="Project Management 101 certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Introduction to Flutter Course Online</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to Flutter Course Online.jpg" alt="Introduction to Flutter Course Online certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Blockchain Certification Training</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Blockchain Certification Training.jpg" alt="Blockchain Certification Training certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Cisco</p>
-      <h3 class="cert-title">Computer Hardware Basics</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Computer Hardware Basics.jpg" alt="Computer Hardware Basics certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">AI Fundamentals with IBM SkillsBuild</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/AI Fundamentals with IBM SkillsBuild.jpg" alt="AI Fundamentals with IBM SkillsBuild certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Cisco</p>
-      <h3 class="cert-title">Introduction to Data Science</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to Data Science.jpg" alt="Introduction to Data Science certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Getting Python Interview Ready</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Getting Python Interview Ready.jpg" alt="Getting Python Interview Ready certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Introduction to Data Science</h3>
-      <p class="cert-meta">Issued Mar 2025</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to Data Science Skill Up.jpg" alt="Introduction to Data Science Skill Up certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Generative AI for Beginners</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Generative AI for Beginners.jpg" alt="Generative AI for Beginners certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">freeCodeCamp</p>
-      <h3 class="cert-title">Relational Database</h3>
-      <p class="cert-meta">Issued Feb 2025 | Credential ID shokomori-rd</p>
-      <div class="cert-thumb"><img src="certificates/Relational Database.jpg" alt="Relational Database certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Cisco</p>
-      <h3 class="cert-title">JavaScript Essentials 1</h3>
-      <p class="cert-meta">Issued Oct 2024</p>
-      <div class="cert-thumb">Placeholder image: certificates/javascript-essentials-1.png</div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Introduction to Figma</h3>
-      <p class="cert-meta">Issued 2024</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to Figma.png" alt="Introduction to Figma certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">freeCodeCamp</p>
-      <h3 class="cert-title">Responsive Web Design</h3>
-      <p class="cert-meta">Issued Sep 2024 | Credential ID shokomori-rwd</p>
-      <div class="cert-thumb">Placeholder image: certificates/responsive-web-design-certification.png</div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">CompTIA</p>
-      <h3 class="cert-title">CompTIA IT Fundamentals (ITF+) Certification</h3>
-      <p class="cert-meta">Issued Nov 2023</p>
-      <div class="cert-thumb">Placeholder image: certificates/comptia-itf-plus.png</div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
+        @if (certificate.credentialUrl) {
+          <a class="cert-link" [href]="certificate.credentialUrl" target="_blank" rel="noopener">Verify Credential</a>
+        } @else {
+          <span class="cert-link cert-link-muted">Credential on file</span>
+        }
+      </article>
+    }
   </div>
+  @if (hasHiddenCertifications()) {
+    <button class="cert-show-more-btn" type="button" (click)="toggleCertificationsExpanded()">
+      {{ certificationsExpanded() ? 'Show Less' : 'Show More' }}
+    </button>
+  }
 </section>
 
 @if (selectedCertificate()) {
@@ -648,7 +393,12 @@
       <button type="button" class="cert-modal-close" aria-label="Close certificate preview" (click)="closeCertificatePreview()">×</button>
       <p class="cert-modal-provider">{{ selectedCertificate()?.provider }}</p>
       <h3 class="cert-modal-title">{{ selectedCertificate()?.title }}</h3>
-      <img class="cert-modal-image" [src]="selectedCertificate()?.src" [alt]="selectedCertificate()?.alt" />
+      <img
+        class="cert-modal-image"
+        [src]="selectedCertificate()?.imageSrc"
+        [alt]="selectedCertificate()?.imageAlt || (selectedCertificate()?.title + ' certificate')"
+        title="Certificate preview"
+      />
     </div>
   </div>
 }
@@ -671,37 +421,29 @@
   <p class="section-label">ACHIEVEMENTS</p>
   <h2 id="achievements-title" class="section-title">Achievements Timeline <span class="plus-tag">+1 More</span></h2>
   <div class="achievements-timeline">
-    <article class="achievement-item">
-      <div class="achievement-dot"></div>
-      <p class="achievement-year">2026</p>
-      <h3 class="achievement-title">3rd Place - Base Build Blockchain Hackathon</h3>
-      <p class="achievement-type">hackathon</p>
-      <p class="achievement-desc">Won 3rd place by building a blockchain-based solution during Base Build 2026.</p>
-    </article>
-
-    <article class="achievement-item">
-      <div class="achievement-dot dot-purple"></div>
-      <p class="achievement-year">2025</p>
-      <h3 class="achievement-title">Champion - GDG-UPM Build with AI Hackathon</h3>
-      <p class="achievement-type">hackathon</p>
-      <p class="achievement-desc">Champion of the GDG-UPM Build with AI Hackathon.</p>
-    </article>
-
-    <article class="achievement-item">
-      <div class="achievement-dot dot-green"></div>
-      <p class="achievement-year">2025</p>
-      <h3 class="achievement-title">Finalist - Create and Conquer 2025 Hackathon</h3>
-      <p class="achievement-type">hackathon</p>
-      <p class="achievement-desc">Finalist in the Create and Conquer 2025 Hackathon.</p>
-    </article>
-
-    <article class="achievement-item">
-      <div class="achievement-dot dot-coral"></div>
-      <p class="achievement-year">2025</p>
-      <h3 class="achievement-title">AWS Learning Club Co-Lead</h3>
-      <p class="achievement-type">community</p>
-      <p class="achievement-desc">Co-leads AWS Learning Club initiatives, supporting peer learning and cloud skills development.</p>
-    </article>
+    @for (achievement of achievements; track achievement.title) {
+      <article class="achievement-item">
+        <div
+          class="achievement-dot"
+          [class.dot-purple]="achievement.dotClass === 'dot-purple'"
+          [class.dot-green]="achievement.dotClass === 'dot-green'"
+          [class.dot-coral]="achievement.dotClass === 'dot-coral'"
+        ></div>
+        <p class="achievement-year">{{ achievement.year }}</p>
+        <h3 class="achievement-title">{{ achievement.title }}</h3>
+        <p class="achievement-type">{{ achievement.type }}</p>
+        <p class="achievement-desc">{{ achievement.description }}</p>
+        <div class="achievement-proof-row" aria-label="Achievement proof links">
+          @for (proof of achievement.proofs; track proof.label) {
+            @if (proof.url) {
+              <a class="achievement-proof-link" [href]="proof.url" target="_blank" rel="noopener">{{ proof.label }}</a>
+            } @else {
+              <span class="achievement-proof-link is-empty">{{ proof.label }} on file</span>
+            }
+          }
+        </div>
+      </article>
+    }
   </div>
 </section>
 
@@ -711,77 +453,19 @@
   <p class="section-label">EXPERIENCE</p>
   <h2 id="experience-title" class="section-title">Experience</h2>
   <div class="timeline">
-    <article class="tl-item">
-      <div class="tl-dot"></div>
-      <p class="tl-date">Jun 2025 - Present</p>
-      <h3 class="tl-title">Co Lead</h3>
-      <p class="tl-org">AWS Learning Club - HAU</p>
-      <p class="tl-desc">Leading cloud learning initiatives, workshops, and mentorship for AWS-focused projects.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot dot-green"></div>
-      <p class="tl-date">Jul 2025</p>
-      <h3 class="tl-title">Freelance Programmer</h3>
-      <p class="tl-org">School of Sin</p>
-      <p class="tl-desc">Built Angular web features, Unreal interactions, and SQL Server-backed data workflows.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot dot-coral"></div>
-      <p class="tl-date">Jun 2024 - Jul 2025</p>
-      <h3 class="tl-title">GDSC Leadership Roles</h3>
-      <p class="tl-org">Google Developer Student Clubs - HAU</p>
-      <p class="tl-desc">Served as Internal Relations Officer and later Chief Community and Development Officer.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot dot-green"></div>
-      <p class="tl-date">Jul 2023 - Apr 2025</p>
-      <h3 class="tl-title">Student Council Leadership Track</h3>
-      <p class="tl-org">HAU School of Computing Student Council</p>
-      <p class="tl-desc">Progressed from External Affairs Staff to PR Councilor, then Vice Governor.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot"></div>
-      <p class="tl-date">Jun 2024 - Apr 2025</p>
-      <h3 class="tl-title">Community Development Staff</h3>
-      <p class="tl-org">League of Outstanding Programmers</p>
-      <p class="tl-desc">Supported member engagement and community-building activities.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot dot-coral"></div>
-      <p class="tl-date">Jun 2023 - Jun 2024</p>
-      <h3 class="tl-title">Teen Information Center Officer</h3>
-      <p class="tl-org">Sangguniang Kabataan Brgy. Lalawigan</p>
-      <p class="tl-desc">Helped deliver youth information and wellness outreach programs.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot dot-green"></div>
-      <p class="tl-date">Sep 2022 - Jun 2024</p>
-      <h3 class="tl-title">President</h3>
-      <p class="tl-org">SCSA SHS - Supreme Student Council</p>
-      <p class="tl-desc">Led student governance, event strategy, and school-wide initiatives.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot"></div>
-      <p class="tl-date">Sep 2022 - Jul 2023</p>
-      <h3 class="tl-title">Head Photojournalist</h3>
-      <p class="tl-org">Catherinian Gazette</p>
-      <p class="tl-desc">Covered events and produced visual stories for campus publications.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot dot-coral"></div>
-      <p class="tl-date">Jun 2018 - Jul 2022</p>
-      <h3 class="tl-title">Member</h3>
-      <p class="tl-org">FREEMAGE</p>
-      <p class="tl-desc">Contributed to design and visual layout projects.</p>
-    </article>
+    @for (experience of experiences; track experience.title + experience.date) {
+      <article class="tl-item">
+        <div
+          class="tl-dot"
+          [class.dot-green]="experience.dotClass === 'dot-green'"
+          [class.dot-coral]="experience.dotClass === 'dot-coral'"
+        ></div>
+        <p class="tl-date">{{ experience.date }}</p>
+        <h3 class="tl-title">{{ experience.title }}</h3>
+        <p class="tl-org">{{ experience.org }}</p>
+        <p class="tl-desc">{{ experience.description }}</p>
+      </article>
+    }
   </div>
 </section>
 
@@ -789,9 +473,10 @@
 
 <section id="contact" aria-labelledby="contact-title">
   <p class="section-label">CONTACT</p>
-  <h2 id="contact-title" class="section-title">Let us build something.</h2>
+  <h2 id="contact-title" class="section-title">Let's Build Something.</h2>
   <div class="contact-grid">
     <form class="contact-form" [formGroup]="contactForm" (ngSubmit)="submitContact()" novalidate>
+      <p class="contact-response-note">Typical response time: within 24 hours.</p>
       <label>
         <span class="sr-only">Your name</span>
         <input type="text" name="name" formControlName="name" placeholder="Your name" required />
@@ -816,8 +501,9 @@
         ></textarea>
       </label>
       <button type="submit" [disabled]="submitState() === 'submitting'">
-        {{ submitState() === 'submitting' ? 'Sending...' : 'Send message' }}
+        {{ submitState() === 'submitting' ? 'Sending...' : 'Send Message' }}
       </button>
+      <a class="btn-primary contact-primary-cta" href="mailto:masatomartin9@gmail.com">Email Me Directly</a>
       @if (submitState() === 'success') {
         <p class="form-status success">Thanks. Your message was sent.</p>
       }
@@ -832,8 +518,10 @@
           <span class="cl-orb"></span>
           <span class="cl-glyph">
             <svg viewBox="0 0 24 24" class="cl-svg" role="presentation" focusable="false">
-              <rect x="3.5" y="6" width="17" height="12" rx="2"></rect>
-              <path d="M4.5 7.5 12 13l7.5-5.5"></path>
+              <rect x="3" y="5" width="18" height="14" rx="2.5"></rect>
+              <path d="m4 7 8 6 8-6"></path>
+              <path d="m4 18 6.4-5"></path>
+              <path d="m20 18-6.4-5"></path>
             </svg>
           </span>
         </div>
@@ -843,15 +531,14 @@
         </div>
       </a>
 
-      <a class="contact-link" href="https://www.linkedin.com/in/masatomartin/?skipRedirect=true" target="_blank" rel="noopener">
+      <a class="contact-link" href="https://www.linkedin.com/in/masatomartin/" target="_blank" rel="noopener">
         <div class="cl-icon cl-icon-g" aria-hidden="true">
           <span class="cl-orb"></span>
           <span class="cl-glyph">
             <svg viewBox="0 0 24 24" class="cl-svg" role="presentation" focusable="false">
-              <circle cx="6" cy="7" r="1.4"></circle>
-              <path d="M4.8 10.3v8"></path>
-              <path d="M10 10.3v8"></path>
-              <path d="M10 14c0-2.2 1.5-3.7 3.7-3.7S17.5 11.8 17.5 14v4.3"></path>
+              <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 1 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"></path>
+              <rect x="2" y="9" width="4" height="12"></rect>
+              <circle cx="4" cy="4" r="2"></circle>
             </svg>
           </span>
         </div>
@@ -866,9 +553,8 @@
           <span class="cl-orb"></span>
           <span class="cl-glyph">
             <svg viewBox="0 0 24 24" class="cl-svg" role="presentation" focusable="false">
-              <path d="M10 7 6 12l4 5"></path>
-              <path d="m14 7 4 5-4 5"></path>
-              <path d="m13 5-2 14"></path>
+              <path d="M9 19c-5 1.5-5-2.5-7-3"></path>
+              <path d="M22 16.5v-2a4.5 4.5 0 0 0-1.2-3.1 4.2 4.2 0 0 0 .1-3.2s-1.1-.35-3.5 1.3a12.3 12.3 0 0 0-6.8 0C8.2 7.85 7.1 8.2 7.1 8.2a4.2 4.2 0 0 0 .1 3.2A4.5 4.5 0 0 0 6 14.5v2a4.5 4.5 0 0 0 4.5 4.5h3A4.5 4.5 0 0 0 18 16.5"></path>
             </svg>
           </span>
         </div>
