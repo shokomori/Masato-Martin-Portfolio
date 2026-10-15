@@ -3,7 +3,7 @@ name: Deploy Angular Portfolio to GitHub Pages
 on:
   push:
     branches:
-      - main
+      - portfolio-dashboard-cv
   workflow_dispatch:
 
 env:
