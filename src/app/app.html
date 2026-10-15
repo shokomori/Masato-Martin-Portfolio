@@ -1,885 +1,414 @@
-<canvas #bgCanvas class="background-canvas" aria-hidden="true"></canvas>
-<div class="particle-switcher" role="group" aria-label="Background effect styles">
-  <p class="particle-switcher-label">FX</p>
-  <div class="particle-switcher-list">
-    @for (mode of particleModes; track mode.id) {
-      <button
-        class="particle-switcher-btn"
-        [class.mode-const]="mode.id === 'constellation'"
-        [class.mode-neb]="mode.id === 'nebula'"
-        [class.mode-comet]="mode.id === 'comet'"
-        type="button"
-        [class.is-active]="activeParticleMode() === mode.id"
-        [attr.aria-pressed]="activeParticleMode() === mode.id"
-        [attr.aria-label]="mode.hint"
-        [attr.title]="mode.hint"
-        (click)="setParticleMode(mode.id)"
-      >
-        {{ mode.label }}
-      </button>
-    }
-  </div>
-</div>
-<div
-  class="cursor-glow"
-  [class.is-node-hot]="cursorNodeHot()"
-  [style.left.px]="mouseX()"
-  [style.top.px]="mouseY()"
-  aria-hidden="true"
-></div>
-<div
-  class="custom-cursor"
-  [class.is-interactive]="cursorInteractive()"
-  [class.is-pressed]="cursorPressed()"
-  [class.is-scrolling]="cursorScrolling()"
-  [class.is-node-hot]="cursorNodeHot()"
-  [style.left.px]="mouseX()"
-  [style.top.px]="mouseY()"
-  aria-hidden="true"
-></div>
-<div
-  class="custom-cursor-dot"
-  [class.is-interactive]="cursorInteractive()"
-  [class.is-scrolling]="cursorScrolling()"
-  [class.is-node-hot]="cursorNodeHot()"
-  [style.left.px]="mouseX()"
-  [style.top.px]="mouseY()"
-  aria-hidden="true"
-></div>
+﻿<main class="stage">
+  <div class="interaction-layer" #interactionLayer aria-hidden="true"></div>
+  <canvas #trackingLine class="tracking-line" aria-hidden="true"></canvas>
+  <header class="frame-top">
+    <a class="brand" href="#top" aria-label="Masato Martin home">
+      <svg viewBox="0 0 88 80" aria-hidden="true">
+        <path d="M0 12L12 0H16V32H29L38 23V43L33 48H16V80H0Z"></path>
+        <path d="M50 0H88V16H57L50 23V57L57 64H88L72 80H50L34 64V16Z"></path>
+      </svg>
+      <span>Masato Martin</span>
+    </a>
+    <nav class="switch" aria-label="Elsewhere">
+      <a href="https://github.com/shokomori" rel="me noopener noreferrer" target="_blank">github</a>
+      <button class="cv-launch" type="button" (click)="openCv($event)">cv</button>
+    </nav>
+  </header>
 
-<nav class="site-nav" aria-label="Primary">
-  <div class="logo">masato<span>.</span>martin</div>
-  <div class="nav-links">
-    @for (section of navSections; track section) {
-      <a
-        [href]="'#' + section"
-        (click)="setActiveSection(section)"
-        [class.is-active]="isActive(section)"
-        [attr.aria-current]="isActive(section) ? 'page' : null"
-      >
-        {{ section }}
-      </a>
-    }
-  </div>
-  <button
-    class="nav-cta"
-    type="button"
-    (click)="openResumeModal()"
+  <section
+    class="editor"
+    [class.is-project-menu-open]="mobileProjectMenuOpen()"
+    [class.is-wheel-debug]="wheelDebug()"
+    [class.is-wheel-layout-pending]="!wheelLayoutReady()"
+    aria-label="Editor"
   >
-    resume
-  </button>
-</nav>
+    <button
+      class="tabline"
+      type="button"
+      [attr.aria-expanded]="mobileProjectMenuOpen()"
+      aria-controls="tree"
+      (click)="toggleMobileProjectMenu()"
+    >
+      <span class="tab-dir">~/Projects</span>
+      <span class="tab-file">{{ selectedProject().title }}</span>
+      <span class="tab-toggle" aria-hidden="true">↓</span>
+    </button>
 
-@if (feedbackToast()) {
-  <div class="feedback-toast" [class.is-error]="feedbackToast()?.kind === 'error'" role="status" aria-live="polite">
-    <span class="feedback-toast-dot"></span>
-    <div>
-      <p class="feedback-toast-title">{{ feedbackToast()?.kind === 'success' ? 'Message sent' : 'Send failed' }}</p>
-      <p class="feedback-toast-text">{{ feedbackToast()?.message }}</p>
-    </div>
-  </div>
-}
-
-<div class="scroll-progress" [style.width.%]="scrollProgress()" aria-hidden="true"></div>
-
-<header class="hero-wrap">
-  <section class="hero" aria-labelledby="hero-title">
-    <div class="hero-grid">
-      <div>
-        <p class="hero-tag">CS Student | Fullstack Dev | UI UX Designer | AWS Co-Lead</p>
-        <h1 id="hero-title">
-          <span>Code.</span>
-          <span class="line-muted">Creativity.</span>
-          <span class="line-accent">Community.</span>
-        </h1>
-        <p class="hero-sub">
-          I build systems, stories, and experiences from reactive Angular apps to cloud-native
-          AWS solutions and immersive game worlds.
-        </p>
-        <div class="hero-btns">
-          <a class="btn-primary" href="#projects">View Projects</a>
-          <a class="btn-secondary" href="#contact">Get In Touch</a>
-        </div>
+    <nav
+      class="wheel"
+      id="tree"
+      #wheelHost
+      role="listbox"
+      aria-label="Projects and workspace"
+      [attr.aria-activedescendant]="'project-option-' + selectedProject().id"
+      tabindex="0"
+      (focusin)="focusWheel()"
+      (wheel)="onWheelProjectNavigate($event)"
+      (pointerdown)="onWheelPointerDown($event)"
+      (pointermove)="onWheelPointerMove($event)"
+      (pointerup)="onWheelPointerUp($event)"
+      (pointercancel)="onWheelPointerUp($event)"
+      [class.is-terminal-focus]="focusMode() === 'terminal'"
+    >
+      <canvas #wheelInk class="wheel-ink" aria-hidden="true"></canvas>
+      <div class="wheel-list" role="presentation">
+        @for (project of projectData; track project.id; let index = $index) {
+          <button
+            [id]="'project-option-' + project.id"
+            type="button"
+            class="wheel-item"
+            role="option"
+            [attr.aria-label]="project.title"
+            [attr.aria-posinset]="index + 1"
+            [attr.aria-setsize]="projectData.length"
+            [class.is-selected]="selectedProjectIndex() === index"
+            [style.transform]="getWheelTransform(index)"
+            [style.zIndex]="getProjectZIndex(index)"
+            [style.--shade]="getProjectShade(index)"
+            [style.visibility]="getProjectVisibility(index)"
+            [attr.tabindex]="selectedProjectIndex() === index ? 0 : -1"
+            (click)="onWheelItemClick($event, index)"
+            [attr.aria-selected]="selectedProjectIndex() === index"
+          >
+            @if (project.screenshots[0]; as screenshot) {
+              <img [src]="screenshot" [alt]="project.title + ' preview'" draggable="false" />
+            } @else {
+              <span class="wheel-preview" aria-hidden="true">
+                <span>{{ project.language }}</span>
+                <span>{{ project.id }}</span>
+              </span>
+            }
+            <span class="wheel-cap">{{ project.title }}</span>
+            @if (selectedProjectIndex() === index) {
+              <span class="wheel-mark" aria-hidden="true"></span>
+            }
+          </button>
+        }
+        <span class="wheel-hint" aria-hidden="true">scroll · drag the wheel</span>
       </div>
-      <div class="hero-visual" aria-hidden="true">
-        <article class="hero-card hc1">
-          <p class="card-label">CURRENT STACK</p>
-          <div class="card-stack">
-            <span class="chip chip-purple">Angular</span>
-            <span class="chip chip-green">AWS Lambda</span>
-            <span class="chip chip-purple">ASP.NET</span>
-            <span class="chip chip-green">DynamoDB</span>
-            <span class="chip chip-coral">Unreal</span>
+    </nav>
+
+    <div class="pane" aria-live="polite">
+      <p class="winbar">
+        <span>{{ selectedProject().path }}</span>
+        <span class="editor-mode">{{ focusMode() === 'terminal' ? 'INSERT' : 'NORMAL' }}</span>
+        <span class="editor-position">1:1 Top</span>
+      </p>
+
+      <div class="buffer" #projectPane tabindex="0" aria-label="Project details" (focus)="focusProjectPane()">
+        @for (line of getProjectBufferLines(); track $index; let index = $index) {
+          <div class="ln" [class.is-tilde]="index === 0">
+            <span class="no">{{ index + 1 }}</span>
+            <span class="tx"><span class="field-label">{{ line.label }}:</span>&nbsp;@if (line.href) {<a [href]="line.href" target="_blank" rel="noopener noreferrer">{{ line.value }}</a>} @else {<span>{{ line.value }}</span>}</span>
           </div>
-        </article>
+        }
 
-        <article class="hero-card hc3">
-          <p class="card-label">ROLE</p>
-          <p class="card-value purple">Co-Lead</p>
-          <p class="card-note">AWS Learning Club</p>
-        </article>
-
-        <article class="hero-card hc2">
-          <p class="card-label">SPIRIT</p>
-          <p class="card-value coral">Artist</p>
-          <p class="card-note">At heart</p>
-        </article>
+        @if (getActiveProjectScreenshot(); as screenshot) {
+          <div class="shot">
+            <figure>
+              <figcaption>
+                <span>{{ selectedProject().title }}</span>
+                <span>{{ getScreenshotIndicator() }}</span>
+              </figcaption>
+              <button type="button" class="frame" (click)="openLightbox($event)">
+                <img [src]="screenshot" [alt]="selectedProject().title + ' preview'" />
+                <span class="frame-hint">open preview</span>
+              </button>
+            </figure>
+          </div>
+        }
       </div>
-    </div>
+      <div class="eye-host" #eyeHost aria-hidden="true">
+        <div class="eye-shell">
+          <span class="eye-type">
+            <span [style.translate]="getEyeTextOffset(0)">design · code</span>
+            <span [style.translate]="getEyeTextOffset(1)">angular · github · ux</span>
+            <span [style.translate]="getEyeTextOffset(2)">web · projects · cloud · aws</span>
+            <span [style.translate]="getEyeTextOffset(3)">typescript · portfolio · angular · github</span>
+            <span [style.translate]="getEyeTextOffset(4)">lorekeeper · voxfilter · gitsprint · ux</span>
+            <span [style.translate]="getEyeTextOffset(5)">design · angular · portfolio · github · code</span>
+            <span [style.translate]="getEyeTextOffset(6)">masato martin · cloud · typescript · projects</span>
+            <span [style.translate]="getEyeTextOffset(7)">angular · github · portfolio · code · ux</span>
+            <span [style.translate]="getEyeTextOffset(8)">lorekeeper · voxfilter · gitsprint · angular</span>
+            <span [style.translate]="getEyeTextOffset(9)">angular · github · portfolio · code · ux</span>
+            <span [style.translate]="getEyeTextOffset(10)">masato martin · cloud · typescript · projects</span>
+            <span [style.translate]="getEyeTextOffset(11)">design · angular · portfolio · github · code</span>
+            <span [style.translate]="getEyeTextOffset(12)">lorekeeper · voxfilter · gitsprint · ux</span>
+            <span [style.translate]="getEyeTextOffset(13)">typescript · portfolio · angular · github</span>
+            <span [style.translate]="getEyeTextOffset(14)">web · projects · cloud · aws</span>
+            <span [style.translate]="getEyeTextOffset(15)">angular · github · ux</span>
+            <span [style.translate]="getEyeTextOffset(16)">design · code</span>
+            <span class="eye-live-code">u {{ pointerTelemetry().tracked ? pointerTelemetry().u.toFixed(3) : '--' }} · v {{ pointerTelemetry().tracked ? pointerTelemetry().v.toFixed(3) : '--' }}</span>
+          </span>
+          <div class="eye-pupil" [style.transform]="eyeTransform()"></div>
+        </div>
+        <span class="eye-readout">{{ eyeReadout() }}</span>
+      </div>
 
-    <div class="scroll-badge" aria-hidden="true">
-      <div class="scroll-line"></div>
-      <span>scroll to explore</span>
+      <section class="terminal-shell" aria-label="Workspace terminal">
+        <div class="terminal-pane">
+          <div class="terminal-bar">
+            <span class="terminal-led"></span>
+            <span>workspace — {{ workspacePath() }} · MASATO-MARTIN</span>
+          </div>
+
+          <div class="terminal-output" #terminalOutput [attr.aria-live]="terminalTyping() ? 'off' : 'polite'">
+            @for (entry of terminalEntries(); track $index) {
+              <div class="terminal-line" [class]="'kind-' + entry.kind" [class.is-typing]="terminalTyping()">
+                {{ entry.text }}
+              </div>
+            }
+          </div>
+
+          <label class="terminal-input-row" for="workspace-command">
+            <span class="prompt">masato@portfolio {{ workspacePath() }} ›</span>
+            <input
+              id="workspace-command"
+              #commandInput
+              type="text"
+              [value]="terminalInput()"
+              (input)="onTerminalInput($event)"
+              (keydown)="onTerminalKeydown($event)"
+              (focus)="focusTerminal()"
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="Project terminal input"
+            />
+          </label>
+        </div>
+      </section>
     </div>
   </section>
-</header>
 
-<hr class="section-divider" />
+  <div class="bar">
+    <p class="bar-id">
+      <span class="bar-title">MASATO-MARTIN</span>
+      <span class="keys">:e ~/Projects · enter ↵ · :theme</span>
+    </p>
 
-<section id="about" aria-labelledby="about-title">
-  <p class="section-label">ABOUT</p>
-  <h2 id="about-title" class="section-title">Three sides of one story.</h2>
-  <div class="about-grid">
-    <article class="about-card">
-      <p class="about-icon">DEV</p>
-      <h3 class="accent-purple">The Developer</h3>
-      <p>
-        Angular, ASP.NET Core, SQL Server, and ADO.NET. I build full-stack apps that are fast,
-        clean, and production-ready.
-      </p>
-    </article>
-
-    <article class="about-card">
-      <p class="about-icon">LDR</p>
-      <h3 class="accent-green">The Leader</h3>
-      <p>
-        Co-lead of the AWS Learning Club and active in student tech communities focused on growth,
-        mentorship, and collaboration.
-      </p>
-    </article>
-
-    <article class="about-card">
-      <p class="about-icon">ART</p>
-      <h3 class="accent-coral">The Creative</h3>
-      <p>
-        I bring storytelling and design thinking into everything I build, from UI details to
-        interactive worlds.
-      </p>
-    </article>
-  </div>
-</section>
-
-<hr class="section-divider" />
-
-<section id="skills" aria-labelledby="skills-title">
-  <p class="section-label">SKILLS</p>
-  <h2 id="skills-title" class="section-title">Skills From Certifications</h2>
-  <div class="skills-grid">
-    <div>
-      <div class="skill-row">
-        <div class="skill-name">Cloud & AWS <span>Advanced</span></div>
-        <div class="skill-bar"><div class="skill-fill sf-green w88"></div></div>
-      </div>
-      <div class="skill-row">
-        <div class="skill-name">UI / UX Design <span>Google UX</span></div>
-        <div class="skill-bar"><div class="skill-fill sf-purple w90"></div></div>
-      </div>
-      <div class="skill-row">
-        <div class="skill-name">AI & Data Science <span>IBM / Cisco</span></div>
-        <div class="skill-bar"><div class="skill-fill sf-coral w78"></div></div>
-      </div>
-      <div class="skill-row">
-        <div class="skill-name">Project Management <span>Google / Simplilearn</span></div>
-        <div class="skill-bar"><div class="skill-fill sf-coral w72"></div></div>
-      </div>
+    <div class="bar-state">
+      <p class="col"><span class="label">PROJECTS</span><span class="value">{{ projectData.length }}</span></p>
+      <p class="col"><span class="label">ACTIVE</span><span class="value">{{ selectedProject().title }}</span></p>
+      <p class="col"><span class="label">EYE</span><span class="value">tracking</span></p>
+      <p class="col"><span class="label">MODE</span><span class="value">{{ focusMode() }}</span></p>
+      <p class="col"><span class="label">GHOST</span><span class="value">{{ terminalTyping() ? 'typing' : 'idle' }}</span></p>
     </div>
 
-    <div>
-      <div class="skill-row">
-        <div class="skill-name">Web Development <span>IBM / freeCodeCamp</span></div>
-        <div class="skill-bar"><div class="skill-fill sf-green w82"></div></div>
+    <button class="den" type="button" aria-label="Switch themes" (click)="cycleTheme(1)" [attr.data-tip]="'switch theme · ' + activeTheme()"></button>
+  </div>
+
+  <section class="desk" #deskHost aria-label="Live keyboard and pointer telemetry">
+    <canvas #deskCanvas class="desk-art" aria-hidden="true"></canvas>
+    <div class="input-telemetry">
+      <header class="input-head">
+        <span>INPUT / LIVE TRACE</span>
+        <span>KEYS {{ getWireKeyCodes().length }} · {{ pointerTelemetry().type }}</span>
+      </header>
+      <div class="input-stage">
+        <svg class="input-wires" viewBox="0 0 1000 128" preserveAspectRatio="none" aria-hidden="true">
+          @for (code of getWireKeyCodes(); track code) {
+            <line
+              class="input-wire"
+              [attr.x1]="getKeyAnchor(code).x"
+              [attr.y1]="getKeyAnchor(code).y"
+              [attr.x2]="getPointerPlotX()"
+              [attr.y2]="getPointerPlotY()"
+            />
+          }
+          <circle
+            class="input-wire-node"
+            [attr.cx]="getPointerPlotX()"
+            [attr.cy]="getPointerPlotY()"
+            r="3"
+          />
+        </svg>
+        <div class="keyboard-visual" aria-hidden="true">
+          @for (row of keyboardRows; track $index) {
+            <div class="keyboard-row">
+              @for (key of row; track key.code) {
+                <span
+                  class="keycap"
+                  [class.is-active]="isKeyActive(key.code)"
+                  [class.is-wide]="key.wide"
+                  [class.is-space]="key.space"
+                  [attr.data-code]="key.code"
+                >{{ key.label || 'space' }}</span>
+              }
+            </div>
+          }
+        </div>
+        <aside class="pointer-visual">
+          <div class="pointer-plot" aria-hidden="true">
+            <span class="pointer-grid-line pointer-grid-x"></span>
+            <span class="pointer-grid-line pointer-grid-y"></span>
+            <span
+              class="pointer-dot"
+              [style.left.%]="pointerTelemetry().u * 100"
+              [style.top.%]="pointerTelemetry().v * 100"
+            ></span>
+          </div>
+          <div class="mouse-readout">
+            <div
+              class="mouse-device"
+              [class.is-left-pressed]="pointerButtons().includes(0)"
+              [class.is-right-pressed]="pointerButtons().includes(2)"
+              aria-hidden="true"
+            >
+              <span class="mouse-left"></span>
+              <span class="mouse-right"></span>
+              <span class="mouse-wheel"></span>
+            </div>
+            <div class="pointer-coordinates">
+              <span>PX {{ pointerTelemetry().tracked ? pointerTelemetry().x : '--' }} / {{ pointerTelemetry().tracked ? pointerTelemetry().y : '--' }}</span>
+              <span>VIEWPORT UV {{ pointerTelemetry().tracked ? pointerTelemetry().u.toFixed(3) : '--' }} / {{ pointerTelemetry().tracked ? pointerTelemetry().v.toFixed(3) : '--' }}</span>
+            </div>
+          </div>
+        </aside>
       </div>
-      <div class="skill-row">
-        <div class="skill-name">Backend Engineering <span>Node.js / Flask</span></div>
-        <div class="skill-bar"><div class="skill-fill sf-green w75"></div></div>
-      </div>
-      <div class="skill-row">
-        <div class="skill-name">Data & Database Foundations <span>SQL / RDBMS</span></div>
-        <div class="skill-bar"><div class="skill-fill sf-purple w80"></div></div>
-      </div>
-      <div class="skill-row">
-        <div class="skill-name">Version Control & Collaboration <span>Git / GitHub</span></div>
-        <div class="skill-bar"><div class="skill-fill sf-coral w65"></div></div>
+      <footer class="input-foot">
+        <span>DOWN · {{ getHeldKeySummary() }}</span>
+        <span>BUTTONS · {{ pointerButtons().join(' ') || '—' }}</span>
+        <span>MOVE THE POINTER / PRESS A KEY</span>
+      </footer>
+    </div>
+  </section>
+</main>
+
+@if (lightboxOpen()) {
+  <div class="lightbox-backdrop" (click)="closeLightbox()">
+    <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightbox-title" tabindex="-1" (click)="$event.stopPropagation()">
+      <button type="button" class="lightbox-close" aria-label="Close preview" (click)="closeLightbox()">×</button>
+      <h2 id="lightbox-title">{{ selectedProject().title }} preview</h2>
+      @if (getActiveProjectScreenshot(); as screenshot) {
+        <img [src]="screenshot" [alt]="selectedProject().title + ' enlarged preview'" />
+      }
+      <div class="lightbox-controls">
+        <button type="button" class="mini-button" (click)="previousScreenshot()" [disabled]="getActiveProjectScreenshots().length < 2">Prev</button>
+        <span>{{ screenshotIndex() + 1 }} / {{ getActiveProjectScreenshots().length }}</span>
+        <button type="button" class="mini-button" (click)="nextScreenshot()" [disabled]="getActiveProjectScreenshots().length < 2">Next</button>
       </div>
     </div>
   </div>
-  <p class="skills-note">Based on completed AWS, Google, IBM, Cisco, freeCodeCamp, and Simplilearn certifications.</p>
-</section>
+}
 
-<hr class="section-divider" />
-
-<section id="techstack" aria-labelledby="techstack-title">
-  <p class="section-label">TECH STACK</p>
-  <h2 id="techstack-title" class="section-title">Core Tech Stack</h2>
-  <div class="techstack-grid">
-    <span class="chip chip-purple tech-chip">Angular</span>
-    <span class="chip chip-purple tech-chip">React</span>
-    <span class="chip chip-purple tech-chip">TypeScript</span>
-    <span class="chip chip-purple tech-chip">JavaScript</span>
-    <span class="chip chip-purple tech-chip">HTML5</span>
-    <span class="chip chip-purple tech-chip">CSS3</span>
-    <span class="chip chip-purple tech-chip">Node.js</span>
-    <span class="chip chip-purple tech-chip">Express</span>
-    <span class="chip chip-purple tech-chip">Python</span>
-    <span class="chip chip-purple tech-chip">Flask</span>
-    <span class="chip chip-purple tech-chip">ASP.NET Core</span>
-    <span class="chip chip-purple tech-chip">ADO.NET</span>
-    <span class="chip chip-coral tech-chip">SQL Server</span>
-    <span class="chip chip-green tech-chip">AWS</span>
-    <span class="chip chip-green tech-chip">AWS Lambda</span>
-    <span class="chip chip-green tech-chip">AWS EC2</span>
-    <span class="chip chip-green tech-chip">AWS S3</span>
-    <span class="chip chip-green tech-chip">DynamoDB</span>
-    <span class="chip chip-green tech-chip">Google Cloud Platform</span>
-    <span class="chip chip-coral tech-chip">Git</span>
-    <span class="chip chip-coral tech-chip">GitHub</span>
-    <span class="chip chip-coral tech-chip">Figma</span>
-    <span class="chip chip-coral tech-chip">Flutter</span>
-    <span class="chip chip-coral tech-chip">Unreal Engine</span>
-  </div>
-</section>
-
-<hr class="section-divider" />
-
-<section id="projects" aria-labelledby="projects-title">
-  <p class="section-label">PROJECTS</p>
-  <h2 id="projects-title" class="section-title">Verified Projects and Builds</h2>
-  <div class="proj-grid">
-    <article class="proj-card">
-      <div class="proj-thumb pt-purple">WEB APP</div>
-      <div class="proj-body">
-        <h3 class="proj-title">Bataan Campus Finder</h3>
-        <p class="proj-desc">
-          A web-based campus discovery platform for exploring and locating educational institutions
-          in Bataan with clean, practical UX.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-purple">Interactive Discovery</span>
-          <span class="chip chip-green">Location Aware</span>
-          <span class="chip chip-coral">Accessible UI</span>
-        </div>
-        <a class="proj-link" href="https://shokomori.github.io/Bataan-Campus-Finder/" target="_blank" rel="noopener">Open Live Project</a>
-      </div>
-    </article>
-
-    <article class="proj-card">
-      <div class="proj-thumb pt-green">AI/ML</div>
-      <div class="proj-body">
-        <h3 class="proj-title">Helpify-AI</h3>
-        <p class="proj-desc">
-          An AI-powered support system that classifies user intent and improves responses over
-          time through a full machine learning pipeline.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-green">Text-CNN</span>
-          <span class="chip chip-green">Reinforcement Learning</span>
-          <span class="chip chip-purple">Scalable ML Pipeline</span>
-        </div>
-        <a class="proj-link" href="https://github.com/shokomori/Helpify-AI" target="_blank" rel="noopener">View on GitHub</a>
-      </div>
-    </article>
-
-    <article class="proj-card">
-      <div class="proj-thumb pt-coral">STARTUP</div>
-      <div class="proj-body">
-        <h3 class="proj-title">VirtuoHero</h3>
-        <p class="proj-desc">
-          A mobile-first AI platform helping Filipino freelancers and students build skills,
-          consistency, and career readiness. My strongest startup-level project.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-coral">Personalized Learning</span>
-          <span class="chip chip-coral">Habit Building</span>
-          <span class="chip chip-green">Career Tracking</span>
-        </div>
-        <a class="proj-link" href="https://github.com/shokomori/Virtuo-Hero" target="_blank" rel="noopener">View on GitHub</a>
-      </div>
-    </article>
-
-    <article class="proj-card">
-      <div class="proj-thumb pt-purple">CREATIVE</div>
-      <div class="proj-body">
-        <h3 class="proj-title">JeepBoxHero</h3>
-        <p class="proj-desc">
-          A Filipino-inspired interactive software concept that blends cultural themes with
-          creative system and experience design.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-purple">Cultural Product Design</span>
-          <span class="chip chip-coral">Interactive Systems</span>
-          <span class="chip chip-green">Creative Engineering</span>
-        </div>
-        <a class="proj-link" href="https://github.com/shokomori/JeepBoxHero" target="_blank" rel="noopener">View on GitHub</a>
-      </div>
-    </article>
-
-    <article class="proj-card">
-      <div class="proj-thumb pt-green">FULL STACK</div>
-      <div class="proj-body">
-        <h3 class="proj-title">Task Tracker (Full-Stack App)</h3>
-        <p class="proj-desc">
-          A production-style task manager built with full CRUD, REST API integration, and clean
-          architecture across frontend, backend, and database layers.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-green">Angular</span>
-          <span class="chip chip-green">ASP.NET Core Web API</span>
-          <span class="chip chip-coral">SQL Server / ADO.NET</span>
-        </div>
-      </div>
-    </article>
-
-    <article class="proj-card">
-      <div class="proj-thumb pt-coral">SHOWCASE</div>
-      <div class="proj-body">
-        <h3 class="proj-title">Angular Portfolio Website</h3>
-        <p class="proj-desc">
-          A reactive portfolio experience with dynamic effects, hover interactions, and modern UX
-          storytelling to showcase technical depth.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-coral">Reactive UI</span>
-          <span class="chip chip-purple">Motion Effects</span>
-          <span class="chip chip-green">Modern UX</span>
-        </div>
-      </div>
-    </article>
-
-    <article class="proj-card">
-      <div class="proj-thumb pt-purple">UI LAB</div>
-      <div class="proj-body">
-        <h3 class="proj-title">Analog + Digital Clock UI</h3>
-        <p class="proj-desc">
-          A polished clock interface combining animated analog and digital displays, theme
-          switching, and timezone support.
-        </p>
-        <div class="proj-tags">
-          <span class="chip chip-purple">HTML/CSS/JS</span>
-          <span class="chip chip-coral">Animation</span>
-          <span class="chip chip-green">Timezone Support</span>
-        </div>
-      </div>
-    </article>
-  </div>
-</section>
-
-<hr class="section-divider" />
-
-<section id="certifications" aria-labelledby="certifications-title">
-  <p class="section-label">CERTIFICATIONS</p>
-  <h2 id="certifications-title" class="section-title">Licenses and Certifications</h2>
-  <div class="cert-filter-row">
-    <label class="cert-filter-label" for="cert-category">Category</label>
-    <select
-      id="cert-category"
-      class="cert-filter-select"
-      [value]="selectedCertificationCategory()"
-      (change)="onCertificationCategoryChange($event)"
+@if (cvOpen()) {
+  <div class="cv-backdrop" (click)="closeCv()">
+    <section
+      class="cv-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cv-title"
+      tabindex="-1"
+      (click)="$event.stopPropagation()"
     >
-      @for (category of certificationCategories; track category.id) {
-        <option [value]="category.id">{{ category.label }}</option>
-      }
-    </select>
-  </div>
-  <div class="cert-grid" (click)="openCertificatePreview($event)">
-    <article class="cert-card">
-      <p class="cert-provider">Amazon Web Services (AWS)</p>
-      <h3 class="cert-title">AWS Academy Graduate - Cloud Foundations - Training Badge</h3>
-      <p class="cert-meta">Issued Mar 2026</p>
-      <div class="cert-thumb"><img src="certificates/AWS Academy Graduate - Cloud Foundations - Training Badge.jpg" alt="AWS Academy Graduate - Cloud Foundations certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
+      <header class="cv-header">
+        <div>
+          <p class="cv-kicker">PORTFOLIO / CURRICULUM VITAE</p>
+          <h2 id="cv-title">Masato Martin</h2>
+        </div>
+        <div class="cv-header-actions">
+          <a class="cv-open-pdf" href="masato_cv_v3.pdf" target="_blank" rel="noopener noreferrer">open full pdf ↗</a>
+          <button class="cv-close" type="button" aria-label="Close CV" (click)="closeCv()">×</button>
+        </div>
+      </header>
 
-    <article class="cert-card">
-      <p class="cert-provider">Google</p>
-      <h3 class="cert-title">Conduct UX Research and Test Early Concepts</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID 5AEYNNH6371Z</p>
-      <div class="cert-thumb"><img src="certificates/Conduct UX Research and Test Early Concepts.jpg" alt="Conduct UX Research and Test Early Concepts certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
+      <nav class="cv-tabs" role="tablist" aria-label="CV slides">
+        @for (slide of cvSlides; track slide.id) {
+          <button
+            class="cv-tab"
+            [attr.data-slide]="slide.id"
+            [id]="'cv-tab-' + slide.id"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="cvSlide() === slide.id"
+            [attr.aria-controls]="'cv-panel-' + slide.id"
+            [attr.tabindex]="cvSlide() === slide.id ? 0 : -1"
+            (click)="selectCvSlide(slide.id)"
+          >{{ slide.label }}</button>
+        }
+      </nav>
 
-    <article class="cert-card">
-      <p class="cert-provider">Google</p>
-      <h3 class="cert-title">Build Wireframes and Low-Fidelity Prototypes</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID HAAMB2503Z2N</p>
-      <div class="cert-thumb"><img src="certificates/Build Wireframes and Low-Fidelity Prototypes.jpg" alt="Build Wireframes and Low-Fidelity Prototypes certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
+      <div class="cv-content">
+        @if (cvSlide() === 'whoami') {
+          <section class="cv-panel cv-whoami" id="cv-panel-whoami" role="tabpanel" aria-labelledby="cv-tab-whoami">
+            <div class="cv-intro">
+              <span class="cv-index">01 / WHOAMI</span>
+              <h3>Computer Science student<br />building useful things.</h3>
+              <p>Full-stack development, cloud computing, and AI systems — with a background in student leadership, tech communities, and hackathon projects.</p>
+              <div class="cv-links">
+                <a href="https://github.com/shokomori" target="_blank" rel="noopener noreferrer">github.com/shokomori ↗</a>
+                <a href="https://linkedin.com/in/masatomartin" target="_blank" rel="noopener noreferrer">linkedin.com/in/masatomartin ↗</a>
+              </div>
+            </div>
 
-    <article class="cert-card">
-      <p class="cert-provider">Google</p>
-      <h3 class="cert-title">Start the UX Design Process: Empathize, Define, and Ideate</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID ITYLABNBOP7W</p>
-      <div class="cert-thumb"><img src="certificates/Start the UX Design Process Empathize, Define, and Ideate.jpg" alt="Start the UX Design Process certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
+            <div class="cv-details">
+              <section class="cv-block">
+                <span class="cv-label">EDUCATION</span>
+                <h4>B.S. Computer Science</h4>
+                <p>Holy Angel University · School of Computing</p>
+              </section>
 
-    <article class="cert-card">
-      <p class="cert-provider">Google</p>
-      <h3 class="cert-title">Foundations of User Experience (UX) Design</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID EFN605CXGSBK</p>
-      <div class="cert-thumb"><img src="certificates/Foundations of User Experience (UX) Design.jpg" alt="Foundations of UX Design certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
+              <section class="cv-block">
+                <span class="cv-label">EXPERIENCE & LEADERSHIP</span>
+                <ul class="cv-entry-list">
+                  <li><strong>Co-Lead</strong><span>AWS Learning Club · HAU</span><small>June 2025 — Present</small></li>
+                  <li><strong>Freelance Programmer</strong><span>School of Sin</span><small>July 2025</small></li>
+                  <li><strong>Chief Community & Development Officer</strong><span>GDSC HAU</span><small>June 2024 — July 2025</small></li>
+                  <li><strong>Vice Governor</strong><span>HAU Computing Student Council</span><small>July 2023 — April 2025</small></li>
+                  <li><strong>President</strong><span>SCSA SHS Supreme Student Council</span><small>September 2022 — June 2024</small></li>
+                </ul>
+              </section>
 
-    <article class="cert-card">
-      <p class="cert-provider">Google</p>
-      <h3 class="cert-title">Build Dynamic User Interfaces (UI) for Websites</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID QP3OISPYOJ51</p>
-      <div class="cert-thumb"><img src="certificates/Build Dynamic User Interfaces (UI) for Websites.jpg" alt="Build Dynamic UIs certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
+              <section class="cv-block">
+                <span class="cv-label">SELECTED ACHIEVEMENTS</span>
+                <ul class="cv-simple-list">
+                  <li>Champion · GDG-UPM Build with AI Hackathon (2025)</li>
+                  <li>Finalist · Create & Conquer Hackathon (2025)</li>
+                  <li>3rd Place · Base Build Blockchain Hackathon (2026)</li>
+                </ul>
+              </section>
 
-    <article class="cert-card">
-      <p class="cert-provider">Google</p>
-      <h3 class="cert-title">Foundations of Project Management</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID PYK2VA0O4F5Q</p>
-      <div class="cert-thumb"><img src="certificates/Foundations of Project Management.jpg" alt="Foundations of Project Management certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Developing AI Applications with Python and Flask</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID VY8DZMCC263Z</p>
-      <div class="cert-thumb"><img src="certificates/Developing AI Applications with Python and Flask.jpg" alt="Developing AI Applications with Python and Flask certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Python for Data Science, AI and Development</h3>
-      <p class="cert-meta">Issued May 2025 | Credential ID V0B9YL9MBFUE</p>
-      <div class="cert-thumb"><img src="certificates/Python for Data Science, AI & Development.jpg" alt="Python for Data Science, AI and Development certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Amazon Web Services (AWS)</p>
-      <h3 class="cert-title">AWS Services Overview for IT Professionals</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID JE8MTYANIJJC</p>
-      <div class="cert-thumb"><img src="certificates/AWS Services Overview for IT Professionals.jpg" alt="AWS Services Overview for IT Professionals certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Developing Back-End Apps with Node.js and Express</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID MZXY0K1W3FSP</p>
-      <div class="cert-thumb"><img src="certificates/Developing Back-End Apps with Node.js and Express.jpg" alt="Developing Back-End Apps with Node.js and Express certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Developing Front-End Apps with React</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID 9BRNXFNJYE6I</p>
-      <div class="cert-thumb"><img src="certificates/Developing Front-End Apps with React.jpg" alt="Developing Front-End Apps with React certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Getting Started with Git and GitHub</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID B1YF8UY5Z50H</p>
-      <div class="cert-thumb"><img src="certificates/Getting Started with Git and GitHub.jpg" alt="Getting Started with Git and GitHub certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Introduction to HTML, CSS, and JavaScript</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID FRUCYPR8SNB7</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to HTML, CSS, & JavaScript.jpg" alt="Introduction to HTML, CSS, and JavaScript certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Introduction to Cloud Computing</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID TWRJZ8H6IJF1</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to Cloud Computing.jpg" alt="Introduction to Cloud Computing certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">Introduction to Software Engineering</h3>
-      <p class="cert-meta">Issued Apr 2025 | Credential ID RIQAEAP5OA5Q</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to Software Engineering.jpg" alt="Introduction to Software Engineering certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Google Cloud Training Online</p>
-      <h3 class="cert-title">Innovating with Google Cloud AI</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Innovating with Google Cloud AI.jpg" alt="Innovating with Google Cloud AI certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Project Management 101</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Project Management 101.jpg" alt="Project Management 101 certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Introduction to Flutter Course Online</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to Flutter Course Online.jpg" alt="Introduction to Flutter Course Online certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Blockchain Certification Training</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Blockchain Certification Training.jpg" alt="Blockchain Certification Training certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Cisco</p>
-      <h3 class="cert-title">Computer Hardware Basics</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Computer Hardware Basics.jpg" alt="Computer Hardware Basics certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">IBM</p>
-      <h3 class="cert-title">AI Fundamentals with IBM SkillsBuild</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/AI Fundamentals with IBM SkillsBuild.jpg" alt="AI Fundamentals with IBM SkillsBuild certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Cisco</p>
-      <h3 class="cert-title">Introduction to Data Science</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to Data Science.jpg" alt="Introduction to Data Science certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Getting Python Interview Ready</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Getting Python Interview Ready.jpg" alt="Getting Python Interview Ready certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Introduction to Data Science</h3>
-      <p class="cert-meta">Issued Mar 2025</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to Data Science Skill Up.jpg" alt="Introduction to Data Science Skill Up certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Generative AI for Beginners</h3>
-      <p class="cert-meta">Issued Apr 2025</p>
-      <div class="cert-thumb"><img src="certificates/Generative AI for Beginners.jpg" alt="Generative AI for Beginners certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">freeCodeCamp</p>
-      <h3 class="cert-title">Relational Database</h3>
-      <p class="cert-meta">Issued Feb 2025 | Credential ID shokomori-rd</p>
-      <div class="cert-thumb"><img src="certificates/Relational Database.jpg" alt="Relational Database certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Cisco</p>
-      <h3 class="cert-title">JavaScript Essentials 1</h3>
-      <p class="cert-meta">Issued Oct 2024</p>
-      <div class="cert-thumb">Placeholder image: certificates/javascript-essentials-1.png</div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">Simplilearn</p>
-      <h3 class="cert-title">Introduction to Figma</h3>
-      <p class="cert-meta">Issued 2024</p>
-      <div class="cert-thumb"><img src="certificates/Introduction to Figma.png" alt="Introduction to Figma certificate" /></div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">freeCodeCamp</p>
-      <h3 class="cert-title">Responsive Web Design</h3>
-      <p class="cert-meta">Issued Sep 2024 | Credential ID shokomori-rwd</p>
-      <div class="cert-thumb">Placeholder image: certificates/responsive-web-design-certification.png</div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-
-    <article class="cert-card">
-      <p class="cert-provider">CompTIA</p>
-      <h3 class="cert-title">CompTIA IT Fundamentals (ITF+) Certification</h3>
-      <p class="cert-meta">Issued Nov 2023</p>
-      <div class="cert-thumb">Placeholder image: certificates/comptia-itf-plus.png</div>
-      <span class="cert-link">Show credential (add link later)</span>
-    </article>
-  </div>
-</section>
-
-@if (selectedCertificate()) {
-  <div class="cert-modal-backdrop" role="presentation" (click)="closeCertificatePreview()">
-    <div class="cert-modal" role="dialog" aria-modal="true" [attr.aria-label]="selectedCertificate()?.title" (click)="$event.stopPropagation()">
-      <button type="button" class="cert-modal-close" aria-label="Close certificate preview" (click)="closeCertificatePreview()">×</button>
-      <p class="cert-modal-provider">{{ selectedCertificate()?.provider }}</p>
-      <h3 class="cert-modal-title">{{ selectedCertificate()?.title }}</h3>
-      <img class="cert-modal-image" [src]="selectedCertificate()?.src" [alt]="selectedCertificate()?.alt" />
-    </div>
+              <section class="cv-block">
+                <span class="cv-label">TECHNICAL TOOLKIT</span>
+                <p><strong>Languages</strong> JavaScript, TypeScript, Python, SQL, HTML5, CSS3</p>
+                <p><strong>Frameworks</strong> Angular, React, ASP.NET Core, Node.js, Express, Flask</p>
+                <p><strong>Cloud & tools</strong> AWS, Google Cloud, Git, GitHub, Figma, Unreal Engine, SQL Server, Flutter</p>
+              </section>
+            </div>
+          </section>
+        } @else if (cvSlide() === 'certifications') {
+          <section class="cv-panel cv-certifications" id="cv-panel-certifications" role="tabpanel" aria-labelledby="cv-tab-certifications">
+            <div class="cv-section-heading">
+              <div>
+                <span class="cv-index">02 / CERTIFICATIONS</span>
+                <h3>Learning, documented.</h3>
+              </div>
+              <span class="cv-count">{{ certificates.length }} CREDENTIALS</span>
+            </div>
+            <div class="cv-certificate-grid">
+              @for (certificate of certificates; track certificate.file) {
+                <a
+                  class="cv-certificate"
+                  [href]="getCertificateAsset(certificate.file)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  [attr.aria-label]="'Open certificate: ' + certificate.title"
+                >
+                  <span class="cv-certificate-image">
+                    <img [ngSrc]="getCertificateAsset(certificate.file)" [alt]="certificate.title" fill loading="lazy" />
+                  </span>
+                  <span class="cv-certificate-title">{{ certificate.title }}</span>
+                  <span class="cv-certificate-open">view credential ↗</span>
+                </a>
+              }
+            </div>
+          </section>
+        } @else {
+          <section class="cv-panel cv-resume" id="cv-panel-resume" role="tabpanel" aria-labelledby="cv-tab-resume">
+            <iframe src="masato_cv_v3.pdf" title="Masato Martin CV PDF"></iframe>
+          </section>
+        }
+      </div>
+    </section>
   </div>
 }
-
-@if (isResumeModalOpen()) {
-  <div class="cert-modal-backdrop" role="presentation" (click)="closeResumeModal()">
-    <div class="cert-modal resume-modal" role="dialog" aria-modal="true" aria-label="Resume preview" (click)="$event.stopPropagation()">
-      <button type="button" class="cert-modal-close" aria-label="Close resume preview" (click)="closeResumeModal()">×</button>
-      <p class="cert-modal-provider">Resume</p>
-      <h3 class="cert-modal-title">Masato Martin - CV</h3>
-      <iframe class="resume-modal-frame" src="masato_cv_v3.pdf#view=FitH" title="Masato Martin resume preview"></iframe>
-      <a class="proj-link" href="masato_cv_v3.pdf" target="_blank" rel="noopener">Open in new tab</a>
-    </div>
-  </div>
-}
-
-<hr class="section-divider" />
-
-<section id="achievements" aria-labelledby="achievements-title">
-  <p class="section-label">ACHIEVEMENTS</p>
-  <h2 id="achievements-title" class="section-title">Achievements Timeline <span class="plus-tag">+1 More</span></h2>
-  <div class="achievements-timeline">
-    <article class="achievement-item">
-      <div class="achievement-dot"></div>
-      <p class="achievement-year">2026</p>
-      <h3 class="achievement-title">3rd Place - Base Build Blockchain Hackathon</h3>
-      <p class="achievement-type">hackathon</p>
-      <p class="achievement-desc">Won 3rd place by building a blockchain-based solution during Base Build 2026.</p>
-    </article>
-
-    <article class="achievement-item">
-      <div class="achievement-dot dot-purple"></div>
-      <p class="achievement-year">2025</p>
-      <h3 class="achievement-title">Champion - GDG-UPM Build with AI Hackathon</h3>
-      <p class="achievement-type">hackathon</p>
-      <p class="achievement-desc">Champion of the GDG-UPM Build with AI Hackathon.</p>
-    </article>
-
-    <article class="achievement-item">
-      <div class="achievement-dot dot-green"></div>
-      <p class="achievement-year">2025</p>
-      <h3 class="achievement-title">Finalist - Create and Conquer 2025 Hackathon</h3>
-      <p class="achievement-type">hackathon</p>
-      <p class="achievement-desc">Finalist in the Create and Conquer 2025 Hackathon.</p>
-    </article>
-
-    <article class="achievement-item">
-      <div class="achievement-dot dot-coral"></div>
-      <p class="achievement-year">2025</p>
-      <h3 class="achievement-title">AWS Learning Club Co-Lead</h3>
-      <p class="achievement-type">community</p>
-      <p class="achievement-desc">Co-leads AWS Learning Club initiatives, supporting peer learning and cloud skills development.</p>
-    </article>
-  </div>
-</section>
-
-<hr class="section-divider" />
-
-<section id="experience" aria-labelledby="experience-title">
-  <p class="section-label">EXPERIENCE</p>
-  <h2 id="experience-title" class="section-title">Experience</h2>
-  <div class="timeline">
-    <article class="tl-item">
-      <div class="tl-dot"></div>
-      <p class="tl-date">Jun 2025 - Present</p>
-      <h3 class="tl-title">Co Lead</h3>
-      <p class="tl-org">AWS Learning Club - HAU</p>
-      <p class="tl-desc">Leading cloud learning initiatives, workshops, and mentorship for AWS-focused projects.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot dot-green"></div>
-      <p class="tl-date">Jul 2025</p>
-      <h3 class="tl-title">Freelance Programmer</h3>
-      <p class="tl-org">School of Sin</p>
-      <p class="tl-desc">Built Angular web features, Unreal interactions, and SQL Server-backed data workflows.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot dot-coral"></div>
-      <p class="tl-date">Jun 2024 - Jul 2025</p>
-      <h3 class="tl-title">GDSC Leadership Roles</h3>
-      <p class="tl-org">Google Developer Student Clubs - HAU</p>
-      <p class="tl-desc">Served as Internal Relations Officer and later Chief Community and Development Officer.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot dot-green"></div>
-      <p class="tl-date">Jul 2023 - Apr 2025</p>
-      <h3 class="tl-title">Student Council Leadership Track</h3>
-      <p class="tl-org">HAU School of Computing Student Council</p>
-      <p class="tl-desc">Progressed from External Affairs Staff to PR Councilor, then Vice Governor.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot"></div>
-      <p class="tl-date">Jun 2024 - Apr 2025</p>
-      <h3 class="tl-title">Community Development Staff</h3>
-      <p class="tl-org">League of Outstanding Programmers</p>
-      <p class="tl-desc">Supported member engagement and community-building activities.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot dot-coral"></div>
-      <p class="tl-date">Jun 2023 - Jun 2024</p>
-      <h3 class="tl-title">Teen Information Center Officer</h3>
-      <p class="tl-org">Sangguniang Kabataan Brgy. Lalawigan</p>
-      <p class="tl-desc">Helped deliver youth information and wellness outreach programs.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot dot-green"></div>
-      <p class="tl-date">Sep 2022 - Jun 2024</p>
-      <h3 class="tl-title">President</h3>
-      <p class="tl-org">SCSA SHS - Supreme Student Council</p>
-      <p class="tl-desc">Led student governance, event strategy, and school-wide initiatives.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot"></div>
-      <p class="tl-date">Sep 2022 - Jul 2023</p>
-      <h3 class="tl-title">Head Photojournalist</h3>
-      <p class="tl-org">Catherinian Gazette</p>
-      <p class="tl-desc">Covered events and produced visual stories for campus publications.</p>
-    </article>
-
-    <article class="tl-item">
-      <div class="tl-dot dot-coral"></div>
-      <p class="tl-date">Jun 2018 - Jul 2022</p>
-      <h3 class="tl-title">Member</h3>
-      <p class="tl-org">FREEMAGE</p>
-      <p class="tl-desc">Contributed to design and visual layout projects.</p>
-    </article>
-  </div>
-</section>
-
-<hr class="section-divider" />
-
-<section id="contact" aria-labelledby="contact-title">
-  <p class="section-label">CONTACT</p>
-  <h2 id="contact-title" class="section-title">Let us build something.</h2>
-  <div class="contact-grid">
-    <form class="contact-form" [formGroup]="contactForm" (ngSubmit)="submitContact()" novalidate>
-      <label>
-        <span class="sr-only">Your name</span>
-        <input type="text" name="name" formControlName="name" placeholder="Your name" required />
-      </label>
-      <label>
-        <span class="sr-only">Your email</span>
-        <input
-          type="email"
-          name="email"
-          formControlName="email"
-          placeholder="Your email"
-          required
-        />
-      </label>
-      <label>
-        <span class="sr-only">Your message</span>
-        <textarea
-          name="message"
-          formControlName="message"
-          placeholder="What is on your mind?"
-          required
-        ></textarea>
-      </label>
-      <button type="submit" [disabled]="submitState() === 'submitting'">
-        {{ submitState() === 'submitting' ? 'Sending...' : 'Send message' }}
-      </button>
-      @if (submitState() === 'success') {
-        <p class="form-status success">Thanks. Your message was sent.</p>
-      }
-      @if (submitState() === 'error') {
-        <p class="form-status error">Send failed. Please email me directly at masatomartin9@gmail.com.</p>
-      }
-    </form>
-
-    <div class="contact-links">
-      <a class="contact-link" href="mailto:masatomartin9@gmail.com">
-        <div class="cl-icon cl-icon-p" aria-hidden="true">
-          <span class="cl-orb"></span>
-          <span class="cl-glyph">
-            <svg viewBox="0 0 24 24" class="cl-svg" role="presentation" focusable="false">
-              <rect x="3.5" y="6" width="17" height="12" rx="2"></rect>
-              <path d="M4.5 7.5 12 13l7.5-5.5"></path>
-            </svg>
-          </span>
-        </div>
-        <div>
-          <p class="cl-name">EMAIL</p>
-          <p class="cl-val">masatomartin9@gmail.com</p>
-        </div>
-      </a>
-
-      <a class="contact-link" href="https://www.linkedin.com/in/masatomartin/?skipRedirect=true" target="_blank" rel="noopener">
-        <div class="cl-icon cl-icon-g" aria-hidden="true">
-          <span class="cl-orb"></span>
-          <span class="cl-glyph">
-            <svg viewBox="0 0 24 24" class="cl-svg" role="presentation" focusable="false">
-              <circle cx="6" cy="7" r="1.4"></circle>
-              <path d="M4.8 10.3v8"></path>
-              <path d="M10 10.3v8"></path>
-              <path d="M10 14c0-2.2 1.5-3.7 3.7-3.7S17.5 11.8 17.5 14v4.3"></path>
-            </svg>
-          </span>
-        </div>
-        <div>
-          <p class="cl-name">LINKEDIN</p>
-          <p class="cl-val">linkedin.com/in/masatomartin</p>
-        </div>
-      </a>
-
-      <a class="contact-link" href="https://github.com/shokomori" target="_blank" rel="noopener">
-        <div class="cl-icon cl-icon-gh" aria-hidden="true">
-          <span class="cl-orb"></span>
-          <span class="cl-glyph">
-            <svg viewBox="0 0 24 24" class="cl-svg" role="presentation" focusable="false">
-              <path d="M10 7 6 12l4 5"></path>
-              <path d="m14 7 4 5-4 5"></path>
-              <path d="m13 5-2 14"></path>
-            </svg>
-          </span>
-        </div>
-        <div>
-          <p class="cl-name">GITHUB</p>
-          <p class="cl-val">github.com/shokomori</p>
-        </div>
-      </a>
-    </div>
-  </div>
-</section>
-
-<footer>designed and built by masato martin</footer>
-

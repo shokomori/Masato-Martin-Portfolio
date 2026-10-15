@@ -4,631 +4,1818 @@ import {
   Component,
   ElementRef,
   OnDestroy,
-  ViewChild,
-  inject,
   signal,
+  ViewChild,
 } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { NgOptimizedImage } from '@angular/common';
+import { createWorkspaceEffects } from './workspace-effects';
 
-type SubmitState = 'idle' | 'submitting' | 'success' | 'error';
+type ThemeName = 'black' | 'violet' | 'green' | 'amber' | 'blue' | 'light';
+type TerminalKind = 'command' | 'output' | 'error' | 'system';
 
-type ParticleMode = 'constellation' | 'nebula' | 'comet';
+type TerminalEntry = {
+  kind: TerminalKind;
+  text: string;
+};
 
-type NodePoint = {
+type ProjectInfoLine = {
+  label: string;
+  value: string;
+  href?: string;
+};
+
+type PortfolioProject = {
+  id: string;
+  title: string;
+  path: string;
+  description: string;
+  language: string;
+  repositoryUrl?: string;
+  liveUrl?: string;
+  screenshots: string[];
+};
+
+type KeyboardVisualKey = {
+  code: string;
+  label: string;
+  wide?: boolean;
+  space?: boolean;
+  anchor: { x: number; y: number };
+};
+
+type PointerTelemetry = {
   x: number;
   y: number;
-  vx: number;
-  vy: number;
-  size: number;
-  alpha: number;
+  u: number;
+  v: number;
+  type: string;
+  tracked: boolean;
 };
 
-type ParticleModeOption = {
-  id: ParticleMode;
-  label: string;
-  hint: string;
-};
+type CvSlide = 'whoami' | 'certifications' | 'resume';
 
-type CertificationCategory = 'all' | 'cloud' | 'uiux' | 'ai' | 'game' | 'web' | 'pm';
-
-type CertificationCategoryOption = {
-  id: CertificationCategory;
-  label: string;
-};
-
-type ToastState = {
-  kind: 'success' | 'error';
-  message: string;
-};
-
-type CertificatePreview = {
+type Certificate = {
   title: string;
-  provider: string;
-  src: string;
-  alt: string;
+  file: string;
 };
+
+const WHEEL_CONFIG = {
+  cardWidth: 150,
+  cardHeight: 94,
+  radius: 480,
+  angleStep: 0.1704,
+  mobileAngleStep: 0.34,
+  baseX: 3,
+  selectedScale: 1,
+  otherScale: 0.64,
+  shade: 0.26,
+  shadeStep: 0.08,
+  leftBleed: 150,
+  maxDpr: 2,
+} as const;
+
+function createKeyboardRow(
+  codesAndLabels: Array<[string, string] | [string, string, 'wide' | 'space']>,
+  rowIndex: number,
+  xOffset = 0,
+): KeyboardVisualKey[] {
+  return codesAndLabels.map(([code, label, size], index) => ({
+    code,
+    label,
+    wide: size === 'wide',
+    space: size === 'space',
+    anchor: { x: 28 + xOffset + index * 39, y: 15 + rowIndex * 24 },
+  }));
+}
 
 @Component({
   selector: 'app-root',
-  imports: [ReactiveFormsModule],
+  imports: [NgOptimizedImage],
   templateUrl: './app.html',
   styleUrl: './app.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '[attr.data-theme]': 'activeTheme()',
+    '(window:pointermove)': 'onWindowPointerMove($event)',
+    '(window:pointerdown)': 'onWindowPointerDown($event)',
+    '(window:pointerup)': 'onWindowPointerUp($event)',
+    '(window:pointercancel)': 'onWindowPointerUp($event)',
+    '(window:keyup)': 'onInputKeyUp($event)',
+    '(window:blur)': 'onWindowBlur()',
+    '(document:mouseleave)': 'onWindowLeave()',
+    '(document:visibilitychange)': 'onDocumentVisibilityChange()',
+    '(window:resize)': 'onWindowGeometryChange()',
+    '(window:scroll)': 'onWindowGeometryChange()',
+    '(window:keydown)': 'onWindowKeydown($event)',
+  },
 })
 export class App implements AfterViewInit, OnDestroy {
-  @ViewChild('bgCanvas') private readonly bgCanvas?: ElementRef<HTMLCanvasElement>;
-
-  private readonly fb = inject(FormBuilder);
-
-  protected readonly navSections = [
-    'about',
-    'skills',
-    'techstack',
-    'projects',
-    'certifications',
-    'achievements',
-    'experience',
-    'contact',
+  protected readonly themeNames: ThemeName[] = ['black', 'violet', 'green', 'amber', 'blue', 'light'];
+  protected readonly activeTheme = signal<ThemeName>('black');
+  protected readonly workspacePath = signal('~/Projects');
+  protected readonly focusMode = signal<'wheel' | 'pane' | 'terminal'>('wheel');
+  protected readonly terminalInput = signal('');
+  protected readonly terminalHistory = signal<string[]>([]);
+  protected readonly terminalHistoryIndex = signal<number | null>(null);
+  protected readonly terminalEntries = signal<TerminalEntry[]>([]);
+  protected readonly projectData: PortfolioProject[] = [
+    {
+      id: 'lorekeeper',
+      title: 'Lorekeeper',
+      path: '~/Projects/lorekeeper',
+      description: 'A full-stack campaign management app for tabletop RPG games.',
+      language: 'HTML',
+      repositoryUrl: 'https://github.com/shokomori/Lorekeeper',
+      liveUrl: 'https://shokomori.github.io/Lorekeeper/',
+      screenshots: [],
+    },
+    {
+      id: 'tekken-pitch-deck',
+      title: 'Tekken Pitch Deck',
+      path: '~/Projects/tekken-pitch-deck',
+      description: 'A presentation project centered on a Tekken pitch deck.',
+      language: 'HTML',
+      repositoryUrl: 'https://github.com/shokomori/Tekken-Pitch-Deck',
+      screenshots: [],
+    },
+    {
+      id: 'voxfilter',
+      title: 'VoxFilter',
+      path: '~/Projects/voxfilter',
+      description: 'A web application for cleaning background noise and isolating clearer voice audio for output and download.',
+      language: 'C#',
+      repositoryUrl: 'https://github.com/shokomori/VoxFilter',
+      screenshots: [],
+    },
+    {
+      id: 'gitsprint',
+      title: 'GitSprint',
+      path: '~/Projects/gitsprint',
+      description: 'An automated GitHub commit tool for generating and scheduling repository changes as part of workflow-testing and automation experiments.',
+      language: 'JavaScript',
+      repositoryUrl: 'https://github.com/shokomori/GitSprint',
+      screenshots: [],
+    },
+    {
+      id: 'tcg-proxy-template',
+      title: 'TCG Proxy Template',
+      path: '~/Projects/tcg-proxy-template',
+      description: 'A drag-and-drop web app that converts card images into print-ready proxy sheets for streamlined tabletop preparation.',
+      language: 'HTML',
+      repositoryUrl: 'https://github.com/shokomori/TCG-Proxy-Template',
+      screenshots: [],
+    },
+    {
+      id: 'chainpulse',
+      title: 'ChainPulse',
+      path: '~/Projects/chainpulse',
+      description: 'A decentralized news platform for blockchain-based verification and decentralized identity.',
+      language: 'HTML',
+      repositoryUrl: 'https://github.com/shokomori/ChainPulse',
+      screenshots: [],
+    },
+    {
+      id: 'bataan-campus-finder',
+      title: 'Bataan Campus Finder',
+      path: '~/Projects/bataan-campus-finder',
+      description: 'A campus discovery platform for exploring and locating educational institutions across Bataan with a focus on practical browsing.',
+      language: 'HTML',
+      repositoryUrl: 'https://github.com/shokomori/Bataan-Campus-Finder',
+      liveUrl: 'https://shokomori.github.io/Bataan-Campus-Finder/',
+      screenshots: [],
+    },
+    {
+      id: 'helpify-ai',
+      title: 'Helpify-AI',
+      path: '~/Projects/helpify-ai',
+      description: 'An intelligent customer support AI using Text-CNN for intent classification and reinforcement learning for adaptive, real-world assistance.',
+      language: 'Python',
+      repositoryUrl: 'https://github.com/shokomori/Helpify-AI',
+      screenshots: [],
+    },
+    {
+      id: 'virtuo-hero',
+      title: 'Virtuo-Hero',
+      path: '~/Projects/virtuo-hero',
+      description: 'VirtuoHero is a mobile platform that uses AI to help Filipino freelancers and students grow skills, track progress, and build career readiness.',
+      language: 'Dart',
+      repositoryUrl: 'https://github.com/shokomori/Virtuo-Hero',
+      screenshots: [],
+    },
+    {
+      id: 'jeepboxhero',
+      title: 'JeepBoxHero',
+      path: '~/Projects/jeepboxhero',
+      description: 'A Filipino-inspired interactive software concept blending cultural themes with creative systems and experience design.',
+      language: 'Dart',
+      repositoryUrl: 'https://github.com/shokomori/JeepBoxHero',
+      screenshots: [],
+    },
+    {
+      id: 'vivy-fraud-detection',
+      title: 'Vivy Fraud Detection',
+      path: '~/Projects/vivy-fraud-detection',
+      description: 'A fraud-detection project for identifying suspicious GCash electronic payment receipts using image-processing pattern analysis.',
+      language: 'Python',
+      repositoryUrl: 'https://github.com/shokomori/vivy-fraud-detection',
+      screenshots: [],
+    },
+    {
+      id: 'apocrypha',
+      title: 'Apocrypha',
+      path: '~/Projects/apocrypha',
+      description: "A music discovery website for tracking what you've listened to, saving songs to explore, and sharing recommendations with friends.",
+      language: 'CSS',
+      repositoryUrl: 'https://github.com/shokomori/apocrypha',
+      screenshots: [],
+    },
+    {
+      id: 'angular-portfolio',
+      title: 'Angular Portfolio',
+      path: '~/Projects/angular-portfolio',
+      description: 'A portfolio for sharing technical work and creative interests, brought together with a reactive interface and a considered visual system.',
+      language: 'TypeScript',
+      repositoryUrl: 'https://github.com/shokomori/Masato-Martin-Portfolio',
+      screenshots: [],
+    },
   ];
-  protected readonly activeSection = signal('about');
-  protected readonly submitState = signal<SubmitState>('idle');
-  protected readonly activeParticleMode = signal<ParticleMode>('comet');
-  protected readonly particleModes: ParticleModeOption[] = [
-    { id: 'constellation', label: '1', hint: 'Connected node network' },
-    { id: 'nebula', label: '2', hint: 'Soft drifting stardust' },
-    { id: 'comet', label: '3', hint: 'Fast streak motion' },
-  ];
-  protected readonly scrollProgress = signal(0);
-  protected readonly mouseX = signal(window.innerWidth / 2);
-  protected readonly mouseY = signal(window.innerHeight / 2);
-  protected readonly cursorInteractive = signal(false);
-  protected readonly cursorPressed = signal(false);
-  protected readonly cursorScrolling = signal(false);
-  protected readonly cursorNodeHot = signal(false);
-  protected readonly feedbackToast = signal<ToastState | null>(null);
-  protected readonly selectedCertificate = signal<CertificatePreview | null>(null);
-  protected readonly selectedCertificationCategory = signal<CertificationCategory>('all');
-  protected readonly certificationCategories: CertificationCategoryOption[] = [
-    { id: 'all', label: 'All Categories' },
-    { id: 'cloud', label: 'Cloud' },
-    { id: 'uiux', label: 'UI/UX' },
-    { id: 'ai', label: 'AI/Data' },
-    { id: 'game', label: 'Game' },
-    { id: 'web', label: 'Web/Dev' },
-    { id: 'pm', label: 'PM' },
-  ];
-  protected readonly isResumeModalOpen = signal(false);
 
-  protected readonly contactForm = this.fb.group({
-    name: ['', [Validators.required, Validators.minLength(2)]],
-    email: ['', [Validators.required, Validators.email]],
-    message: ['', [Validators.required, Validators.minLength(10)]],
+  protected readonly selectedProjectIndex = signal(0);
+  protected readonly selectedProject = signal<PortfolioProject>(this.projectData[0]);
+  protected readonly mobileProjectMenuOpen = signal(false);
+  protected readonly wheelDebug = signal(false);
+  protected readonly wheelLayoutReady = signal(false);
+  protected readonly screenshotIndex = signal(0);
+  protected readonly lightboxOpen = signal(false);
+  protected readonly cvOpen = signal(false);
+  protected readonly cvSlide = signal<CvSlide>('resume');
+  protected readonly cvSlides: Array<{ id: CvSlide; label: string }> = [
+    { id: 'whoami', label: 'whoami' },
+    { id: 'certifications', label: 'certifications' },
+    { id: 'resume', label: 'cv pdf' },
+  ];
+  protected readonly certificates: Certificate[] = [
+    { title: 'AI Fundamentals with IBM SkillsBuild', file: 'AI Fundamentals with IBM SkillsBuild.jpg' },
+    { title: 'AWS Academy Graduate - Cloud Foundations - Training Badge', file: 'AWS Academy Graduate - Cloud Foundations - Training Badge.jpg' },
+    { title: 'AWS Services Overview for IT Professionals', file: 'AWS Services Overview for IT Professionals.jpg' },
+    { title: 'Blockchain Certification Training', file: 'Blockchain Certification Training.jpg' },
+    { title: 'Build Dynamic User Interfaces (UI) for Websites', file: 'Build Dynamic User Interfaces (UI) for Websites.jpg' },
+    { title: 'Build Wireframes and Low-Fidelity Prototypes', file: 'Build Wireframes and Low-Fidelity Prototypes.jpg' },
+    { title: 'Computer Hardware Basics', file: 'Computer Hardware Basics.jpg' },
+    { title: 'Conduct UX Research and Test Early Concepts', file: 'Conduct UX Research and Test Early Concepts.jpg' },
+    { title: 'Developing AI Applications with Python and Flask', file: 'Developing AI Applications with Python and Flask.jpg' },
+    { title: 'Developing Back-End Apps with Node.js and Express', file: 'Developing Back-End Apps with Node.js and Express.jpg' },
+    { title: 'Developing Front-End Apps with React', file: 'Developing Front-End Apps with React.jpg' },
+    { title: 'Foundations of Project Management', file: 'Foundations of Project Management.jpg' },
+    { title: 'Foundations of User Experience (UX) Design', file: 'Foundations of User Experience (UX) Design.jpg' },
+    { title: 'Generative AI for Beginners', file: 'Generative AI for Beginners.jpg' },
+    { title: 'Getting Python Interview Ready', file: 'Getting Python Interview Ready.jpg' },
+    { title: 'Getting Started with Git and GitHub', file: 'Getting Started with Git and GitHub.jpg' },
+    { title: 'Innovating with Google Cloud AI', file: 'Innovating with Google Cloud AI.jpg' },
+    { title: 'Introduction to Cloud Computing', file: 'Introduction to Cloud Computing.jpg' },
+    { title: 'Introduction to Data Science Skill Up', file: 'Introduction to Data Science Skill Up.jpg' },
+    { title: 'Introduction to Data Science', file: 'Introduction to Data Science.jpg' },
+    { title: 'Introduction to Figma', file: 'Introduction to Figma.png' },
+    { title: 'Introduction to Flutter Course Online', file: 'Introduction to Flutter Course Online.jpg' },
+    { title: 'Introduction to HTML, CSS, & JavaScript', file: 'Introduction to HTML, CSS, & JavaScript.jpg' },
+    { title: 'Introduction to Software Engineering', file: 'Introduction to Software Engineering.jpg' },
+    { title: 'Project Management 101', file: 'Project Management 101.jpg' },
+    { title: 'Python for Data Science, AI & Development', file: 'Python for Data Science, AI & Development.jpg' },
+    { title: 'Relational Database', file: 'Relational Database.jpg' },
+    { title: 'Start the UX Design Process: Empathize, Define, and Ideate', file: 'Start the UX Design Process Empathize, Define, and Ideate.jpg' },
+  ];
+  protected readonly terminalTyping = signal(false);
+  protected readonly eyeReadout = signal('PUPIL · wheel · 0.00, 0.00 · UV --, --');
+  protected readonly eyeTransform = signal('translate(0px, 0px)');
+  protected readonly activeKeyCodes = signal<string[]>([]);
+  protected readonly scriptedKeyCode = signal<string | null>(null);
+  protected readonly pointerTelemetry = signal<PointerTelemetry>({
+    x: 0,
+    y: 0,
+    u: 0.5,
+    v: 0.5,
+    type: 'idle',
+    tracked: false,
+  });
+  protected readonly pointerButtons = signal<number[]>([]);
+  protected readonly keyboardRows: KeyboardVisualKey[][] = [
+    createKeyboardRow([
+      ['Escape', 'esc'], ['F1', 'F1'], ['F2', 'F2'], ['F3', 'F3'], ['F4', 'F4'],
+      ['F5', 'F5'], ['F6', 'F6'], ['F7', 'F7'], ['F8', 'F8'], ['F9', 'F9'],
+      ['F10', 'F10'], ['F11', 'F11'], ['F12', 'F12'],
+    ], 0),
+    createKeyboardRow([
+      ['Backquote', '`'], ['Digit1', '1'], ['Digit2', '2'], ['Digit3', '3'],
+      ['Digit4', '4'], ['Digit5', '5'], ['Digit6', '6'], ['Digit7', '7'],
+      ['Digit8', '8'], ['Digit9', '9'], ['Digit0', '0'], ['Minus', '-'],
+      ['Equal', '='], ['Backspace', 'back', 'wide'],
+    ], 1),
+    createKeyboardRow([
+      ['Tab', 'tab', 'wide'], ['KeyQ', 'q'], ['KeyW', 'w'], ['KeyE', 'e'],
+      ['KeyR', 'r'], ['KeyT', 't'], ['KeyY', 'y'], ['KeyU', 'u'],
+      ['KeyI', 'i'], ['KeyO', 'o'], ['KeyP', 'p'], ['BracketLeft', '['],
+      ['BracketRight', ']'], ['Backslash', '\\'],
+    ], 2),
+    createKeyboardRow([
+      ['CapsLock', 'caps', 'wide'], ['KeyA', 'a'], ['KeyS', 's'], ['KeyD', 'd'],
+      ['KeyF', 'f'], ['KeyG', 'g'], ['KeyH', 'h'], ['KeyJ', 'j'],
+      ['KeyK', 'k'], ['KeyL', 'l'], ['Semicolon', ';'], ['Quote', "'"],
+      ['Enter', 'enter', 'wide'],
+    ], 3),
+    createKeyboardRow([
+      ['ShiftLeft', 'shift', 'wide'], ['KeyZ', 'z'], ['KeyX', 'x'], ['KeyC', 'c'],
+      ['KeyV', 'v'], ['KeyB', 'b'], ['KeyN', 'n'], ['KeyM', 'm'],
+      ['Comma', ','], ['Period', '.'], ['Slash', '/'], ['ShiftRight', 'shift', 'wide'],
+    ], 4),
+    createKeyboardRow([
+      ['ControlLeft', 'ctrl', 'wide'], ['MetaLeft', 'cmd'], ['AltLeft', 'alt'],
+      ['Space', '', 'space'], ['AltRight', 'alt'], ['ArrowLeft', '←'],
+      ['ArrowDown', '↓'], ['ArrowUp', '↑'], ['ArrowRight', '→'],
+    ], 5, 35),
+  ];
+  protected readonly wheelLayout = signal<{
+    width: number;
+    height: number;
+    cardWidth: number;
+    cardHeight: number;
+    radius: number;
+    angleStep: number;
+    baseX: number;
+  }>({
+    width: 230.4,
+    height: 579,
+    cardWidth: WHEEL_CONFIG.cardWidth,
+    cardHeight: WHEEL_CONFIG.cardHeight,
+    radius: 200,
+    angleStep: WHEEL_CONFIG.angleStep,
+    baseX: WHEEL_CONFIG.baseX,
   });
 
-  private observer?: IntersectionObserver;
-  private sectionElements: HTMLElement[] = [];
-  private readonly canvasNodes: NodePoint[] = [];
-  private animationFrameId = 0;
-  private scrollStopTimer = 0;
-  private feedbackToastTimer = 0;
-  private scrollMomentum = 0;
-  private backgroundContext?: CanvasRenderingContext2D;
-  private backgroundCanvas?: HTMLCanvasElement;
+  @ViewChild('wheelHost') private wheelHost?: ElementRef<HTMLElement>;
+  @ViewChild('wheelInk') private wheelInk?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('trackingLine') private trackingLine?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('deskCanvas') private deskCanvas?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('deskHost') private deskHost?: ElementRef<HTMLElement>;
+  @ViewChild('projectPane') private projectPane?: ElementRef<HTMLElement>;
+  @ViewChild('commandInput') private commandInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('eyeHost') private eyeHost?: ElementRef<HTMLElement>;
+  @ViewChild('terminalOutput') private terminalOutput?: ElementRef<HTMLElement>;
+  @ViewChild('interactionLayer') private interactionLayer?: ElementRef<HTMLElement>;
 
-  private readonly handleMouseMove = (event: MouseEvent): void => {
-    this.mouseX.set(event.clientX);
-    this.mouseY.set(event.clientY);
-  };
+  private wheelResizeObserver: ResizeObserver | null = null;
+  private workspaceEffects: ReturnType<typeof createWorkspaceEffects> | null = null;
+  private terminalTypingTimer: number | null = null;
+  private terminalTypingQueue: TerminalEntry[] = [];
+  private terminalTypingCurrent: TerminalEntry | null = null;
+  private terminalTypingPosition = 0;
+  private scriptedKeyTimer: number | null = null;
+  private projectRevealAnimation: Animation | null = null;
+  private projectCardAnimation: Animation | null = null;
+  private pointerAnimations = new Set<Animation>();
+  private eyeBounds = { left: 0, top: 0, width: 0, height: 0 };
+  private eyeTravel = 19;
+  private eyeTarget = { x: 0, y: 0 };
+  private eyePosition = { x: 0, y: 0 };
+  private pointerPosition = { x: 0, y: 0, type: 'mouse' };
+  private eyeIdleTimer: number | null = null;
+  private wheelDelta = 0;
+  private wheelLocked = false;
+  private wheelUnlockTimer: number | null = null;
+  private wheelDeltaResetTimer: number | null = null;
+  private wheelClickSuppressionTimer: number | null = null;
+  private terminalDraft = '';
+  private dragPointerId: number | null = null;
+  private dragLastY = 0;
+  private dragMoved = false;
+  private suppressNextWheelClick = false;
+  private lightboxReturnFocus: HTMLElement | null = null;
+  private cvReturnFocus: HTMLElement | null = null;
 
-  private readonly handleResize = (): void => {
-    this.resizeCanvas();
-    const canvas = this.bgCanvas?.nativeElement;
-    if (canvas) {
-      this.buildNodes(canvas);
-    }
-  };
-
-  private readonly handlePointerOver = (event: MouseEvent): void => {
-    const target = event.target as HTMLElement | null;
-    if (!target) {
-      this.cursorInteractive.set(false);
-      return;
-    }
-
-    this.cursorInteractive.set(Boolean(target.closest('a, button, input, textarea, .proj-card')));
-  };
-
-  private readonly handlePointerDown = (): void => {
-    this.cursorPressed.set(true);
-  };
-
-  private readonly handlePointerUp = (): void => {
-    this.cursorPressed.set(false);
-  };
-
-  private readonly handleScroll = (): void => {
-    const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
-    const maxScroll = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
-    const progress = Math.max(0, Math.min(100, (scrollTop / maxScroll) * 100));
-    const delta = scrollTop - (this.scrollProgress() / 100) * maxScroll;
-
-    this.scrollProgress.set(progress);
-    this.scrollMomentum = Math.max(-2.2, Math.min(2.2, this.scrollMomentum * 0.55 + delta * 0.01));
-    document.documentElement.style.setProperty('--scroll-progress', `${progress}`);
-    document.documentElement.style.setProperty('--scroll-momentum', `${this.scrollMomentum}`);
-    this.syncActiveSectionWithViewport();
-
-    this.cursorScrolling.set(true);
-    if (this.scrollStopTimer) {
-      window.clearTimeout(this.scrollStopTimer);
-    }
-    this.scrollStopTimer = window.setTimeout(() => {
-      this.cursorScrolling.set(false);
-    }, 140);
-  };
-
-  private readonly handleVisibilityChange = (): void => {
-    if (document.visibilityState === 'visible') {
-      this.startBackgroundAnimation();
-    }
-  };
-
-  protected openCertificatePreview(event: MouseEvent): void {
-    const target = event.target as HTMLElement | null;
-    const card = target?.closest('.cert-card');
-    const image = card?.querySelector('img');
-    const title = card?.querySelector('.cert-title')?.textContent?.trim();
-    const provider = card?.querySelector('.cert-provider')?.textContent?.trim();
-
-    if (!card || !image || !title || !provider) {
-      return;
-    }
-
-    this.selectedCertificate.set({
-      title,
-      provider,
-      src: image.getAttribute('src') ?? image.src,
-      alt: image.getAttribute('alt') ?? title,
-    });
-  }
-
-  protected closeCertificatePreview(): void {
-    this.selectedCertificate.set(null);
-  }
-
-  protected onCertificationCategoryChange(event: Event): void {
-    const target = event.target as HTMLSelectElement | null;
-    const value = target?.value as CertificationCategory | undefined;
-    const allowed = new Set<CertificationCategory>(['all', 'cloud', 'uiux', 'ai', 'game', 'web', 'pm']);
-
-    if (!value || !allowed.has(value)) {
-      return;
-    }
-
-    this.selectedCertificationCategory.set(value);
-    this.applyCertificationFilter();
-  }
-
-  protected openResumeModal(): void {
-    this.isResumeModalOpen.set(true);
-  }
-
-  protected closeResumeModal(): void {
-    this.isResumeModalOpen.set(false);
+  constructor() {
+    this.applyTheme(this.resolveStoredTheme());
+    this.selectProject(0);
   }
 
   ngAfterViewInit(): void {
-    this.initializeBackground();
-
-    window.addEventListener('mouseover', this.handlePointerOver);
-    window.addEventListener('mousedown', this.handlePointerDown);
-    window.addEventListener('mouseup', this.handlePointerUp);
-    window.addEventListener('scroll', this.handleScroll, { passive: true });
-    document.addEventListener('visibilitychange', this.handleVisibilityChange);
-
-    if (typeof IntersectionObserver === 'undefined') {
-      return;
+    this.measureWheelGeometry();
+    this.measureEyeBounds();
+    const overlay = this.trackingLine?.nativeElement;
+    const desk = this.deskCanvas?.nativeElement;
+    const deskHost = this.deskHost?.nativeElement;
+    const wheelHost = this.wheelHost?.nativeElement;
+    const eyeHost = this.eyeHost?.nativeElement;
+    const themeRoot = document.querySelector<HTMLElement>('app-root');
+    if (overlay && desk && deskHost && wheelHost && eyeHost && themeRoot) {
+      this.workspaceEffects = createWorkspaceEffects({ overlay, desk, deskHost, wheelHost, eyeHost, themeRoot });
+    }
+    this.wheelDebug.set(new URLSearchParams(window.location.search).get('debug') === '1');
+    if (this.wheelDebug()) {
+      window.requestAnimationFrame(() => this.logWheelBounds());
     }
 
-    const sections = this.navSections
-      .map((id) => document.getElementById(id))
-      .filter((section): section is HTMLElement => section !== null);
-    this.sectionElements = sections;
-
-    this.observer = new IntersectionObserver(
-      () => this.syncActiveSectionWithViewport(),
-      {
-        threshold: [0, 0.15, 0.3],
-        rootMargin: '-86px 0px -55% 0px',
-      },
-    );
-
-    for (const section of sections) {
-      this.observer.observe(section);
+    if (typeof ResizeObserver !== 'undefined') {
+      this.wheelResizeObserver = new ResizeObserver(() => {
+        this.measureWheelGeometry();
+        this.measureEyeBounds();
+        if (this.wheelDebug()) {
+          window.requestAnimationFrame(() => this.logWheelBounds());
+        }
+      });
+      if (this.wheelHost) {
+        this.wheelResizeObserver.observe(this.wheelHost.nativeElement);
+      }
+      if (this.eyeHost) {
+        this.wheelResizeObserver.observe(this.eyeHost.nativeElement);
+      }
     }
-
-    this.syncActiveSectionWithViewport();
-    this.applyCertificationFilter();
   }
 
   ngOnDestroy(): void {
-    this.observer?.disconnect();
-    window.removeEventListener('mousemove', this.handleMouseMove);
-    window.removeEventListener('resize', this.handleResize);
-    window.removeEventListener('mouseover', this.handlePointerOver);
-    window.removeEventListener('mousedown', this.handlePointerDown);
-    window.removeEventListener('mouseup', this.handlePointerUp);
-    window.removeEventListener('scroll', this.handleScroll);
-    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
-    if (this.scrollStopTimer) {
-      window.clearTimeout(this.scrollStopTimer);
+    this.workspaceEffects?.destroy();
+    this.wheelResizeObserver?.disconnect();
+    if (this.terminalTypingTimer !== null) {
+      window.clearTimeout(this.terminalTypingTimer);
     }
-    if (this.feedbackToastTimer) {
-      window.clearTimeout(this.feedbackToastTimer);
+    if (this.scriptedKeyTimer !== null) {
+      window.clearTimeout(this.scriptedKeyTimer);
     }
-    if (this.animationFrameId) {
-      cancelAnimationFrame(this.animationFrameId);
-      this.animationFrameId = 0;
+    this.projectRevealAnimation?.cancel();
+    this.projectCardAnimation?.cancel();
+    for (const animation of this.pointerAnimations) {
+      animation.cancel();
+    }
+    this.pointerAnimations.clear();
+    if (this.eyeIdleTimer !== null) {
+      window.clearTimeout(this.eyeIdleTimer);
+    }
+    if (this.wheelUnlockTimer !== null) {
+      window.clearTimeout(this.wheelUnlockTimer);
+    }
+    if (this.wheelDeltaResetTimer !== null) {
+      window.clearTimeout(this.wheelDeltaResetTimer);
+    }
+    if (this.wheelClickSuppressionTimer !== null) {
+      window.clearTimeout(this.wheelClickSuppressionTimer);
     }
   }
 
-  protected async submitContact(): Promise<void> {
-    if (this.contactForm.invalid) {
-      this.contactForm.markAllAsTouched();
+  protected onWindowPointerMove(event: PointerEvent): void {
+    this.updatePointerTelemetry(event.clientX, event.clientY, event.pointerType || 'mouse');
+    if (event.pointerType === 'touch') {
+      return;
+    }
+    this.lookTowardPointer(event.clientX, event.clientY);
+    this.resetEyeWhenIdle();
+  }
+
+  protected onWindowPointerDown(event: PointerEvent): void {
+    this.updatePointerTelemetry(event.clientX, event.clientY, event.pointerType || 'mouse');
+    this.setPointerButtons(event.buttons || (event.button >= 0 ? 1 << event.button : 0));
+    if (this.prefersReducedMotion()) {
       return;
     }
 
-    this.submitState.set('submitting');
+    const layer = this.interactionLayer?.nativeElement;
+    if (!layer) {
+      return;
+    }
 
-    try {
-      const payload = {
-        name: this.contactForm.value.name ?? '',
-        email: this.contactForm.value.email ?? '',
-        message: this.contactForm.value.message ?? '',
-      };
+    const ripple = document.createElement('span');
+    ripple.className = 'pointer-ripple';
+    ripple.style.left = `${event.clientX}px`;
+    ripple.style.top = `${event.clientY}px`;
+    layer.append(ripple);
+    if (typeof ripple.animate !== 'function') {
+      ripple.remove();
+      return;
+    }
 
-      const response = await fetch('https://formsubmit.co/ajax/masatomartin9@gmail.com', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          ...payload,
-          _subject: 'Portfolio contact form message',
-          _captcha: 'false',
-          _template: 'table',
-        }),
-      });
+    const animation = ripple.animate(
+      [
+        { opacity: 0.76, transform: 'translate(-50%, -50%) scale(0.25)' },
+        { opacity: 0, transform: 'translate(-50%, -50%) scale(5)' },
+      ],
+      { duration: 460, easing: 'cubic-bezier(0.2, 0.72, 0.24, 1)' },
+    );
+    this.pointerAnimations.add(animation);
+    animation.onfinish = () => {
+      this.pointerAnimations.delete(animation);
+      ripple.remove();
+    };
+  }
 
-      if (!response.ok) {
-        throw new Error('Contact request failed');
+  protected onWindowPointerUp(event: PointerEvent): void {
+    this.updatePointerTelemetry(event.clientX, event.clientY, event.pointerType || 'mouse');
+    this.setPointerButtons(event.buttons);
+    if (event.pointerType === 'touch') {
+      this.returnEyeToRest();
+    }
+  }
+
+  protected onWindowLeave(): void {
+    this.pointerButtons.set([]);
+    this.returnEyeToRest();
+  }
+
+  protected onWindowBlur(): void {
+    this.activeKeyCodes.set([]);
+    this.pointerButtons.set([]);
+    this.returnEyeToRest();
+  }
+
+  protected onInputKeyDown(event: KeyboardEvent): void {
+    const code = event.code || this.getKeyCodeFromKey(event.key);
+    if (!code || this.activeKeyCodes().includes(code)) {
+      return;
+    }
+    this.activeKeyCodes.update((active) => [...active, code]);
+  }
+
+  protected onInputKeyUp(event: KeyboardEvent): void {
+    const code = event.code || this.getKeyCodeFromKey(event.key);
+    if (code && this.activeKeyCodes().includes(code)) {
+      this.activeKeyCodes.update((active) => active.filter((activeCode) => activeCode !== code));
+    }
+  }
+
+  protected onDocumentVisibilityChange(): void {
+    if (document.visibilityState === 'hidden') {
+      this.finishTerminalTyping();
+      this.activeKeyCodes.set([]);
+      this.pointerButtons.set([]);
+      this.returnEyeToRest();
+    }
+  }
+
+  protected onWindowGeometryChange(): void {
+    this.measureWheelGeometry();
+    this.measureEyeBounds();
+    if (this.pointerTelemetry().tracked) {
+      this.updatePointerTelemetry(this.pointerPosition.x, this.pointerPosition.y, this.pointerPosition.type);
+    }
+    if (this.wheelDebug()) {
+      window.requestAnimationFrame(() => this.logWheelBounds());
+    }
+  }
+
+  protected onWindowKeydown(event: KeyboardEvent): void {
+    this.onInputKeyDown(event);
+    if (this.mobileProjectMenuOpen() && event.key === 'Escape') {
+      event.preventDefault();
+      this.mobileProjectMenuOpen.set(false);
+      return;
+    }
+    if (this.cvOpen()) {
+      if (event.key === 'Tab') {
+        const focusable = Array.from(document.querySelectorAll<HTMLElement>(
+          '.cv-dialog button:not(:disabled), .cv-dialog a[href], .cv-dialog iframe, .cv-dialog [tabindex]:not([tabindex="-1"])',
+        ));
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        this.closeCv();
+      } else if (
+        (event.key === 'ArrowLeft' || event.key === 'ArrowRight') &&
+        (event.target instanceof HTMLElement && event.target.getAttribute('role') === 'tab')
+      ) {
+        event.preventDefault();
+        this.moveCvSlide(event.key === 'ArrowRight' ? 1 : -1);
       }
-
-      this.contactForm.reset();
-      this.submitState.set('success');
-      this.showToast('success', 'Your message was sent. I will get back to you soon.');
-    } catch {
-      this.submitState.set('error');
-      this.showToast('error', 'Message could not be sent. Please email me directly.');
+      return;
     }
-  }
-
-  protected isActive(sectionId: string): boolean {
-    return this.activeSection() === sectionId;
-  }
-
-  protected setActiveSection(sectionId: string): void {
-    this.activeSection.set(sectionId);
-  }
-
-  protected setParticleMode(mode: ParticleMode): void {
-    if (this.activeParticleMode() === mode) {
+    if (this.lightboxOpen()) {
+      if (event.key === 'Tab') {
+        const buttons = Array.from(document.querySelectorAll<HTMLElement>('.lightbox button:not(:disabled)'));
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        this.closeLightbox();
+      } else if (event.key === 'ArrowLeft' && this.getActiveProjectScreenshots().length > 1) {
+        event.preventDefault();
+        this.previousScreenshot();
+      } else if (event.key === 'ArrowRight' && this.getActiveProjectScreenshots().length > 1) {
+        event.preventDefault();
+        this.nextScreenshot();
+      }
       return;
     }
 
-    this.activeParticleMode.set(mode);
-    const canvas = this.backgroundCanvas ?? this.bgCanvas?.nativeElement;
-    if (canvas) {
-      this.buildNodes(canvas);
-    }
-  }
-
-  private initializeBackground(): void {
-    const canvas = this.bgCanvas?.nativeElement;
-    if (!canvas) {
+    if (this.isEditableTarget(event.target)) {
       return;
     }
 
+    const key = event.key.toLowerCase();
+    const eventTarget = event.target instanceof HTMLElement ? event.target : null;
+    const activeElement = document.activeElement;
+    const inWheel = !!eventTarget?.closest('.wheel') || !!this.wheelHost?.nativeElement.contains(activeElement);
+    const inProjectPane =
+      !!eventTarget?.closest('.buffer') ||
+      (activeElement instanceof HTMLElement && activeElement.closest('.buffer') !== null);
+    const isWorkspaceContext =
+      eventTarget === document.body ||
+      eventTarget === document.documentElement ||
+      inWheel ||
+      activeElement === document.body;
+
+    if ((isWorkspaceContext || inProjectPane) && key === ':') {
+      event.preventDefault();
+      const input = this.commandInput?.nativeElement;
+      if (input) {
+        this.terminalInput.set(':');
+        input.value = ':';
+        input.focus();
+      }
+    } else if (isWorkspaceContext && (key === 'arrowdown' || key === 'j' || key === 'arrowup' || key === 'k')) {
+      event.preventDefault();
+      this.navigateProject(key === 'arrowdown' || key === 'j' ? 1 : -1, inWheel);
+    } else if (inWheel && key === 'enter') {
+      event.preventDefault();
+      this.activateProject();
+    } else if (inProjectPane && key === 'escape') {
+      event.preventDefault();
+      this.focusSelectedProject();
+    } else if (isWorkspaceContext && key === 'arrowleft' && this.getActiveProjectScreenshots().length > 1) {
+      event.preventDefault();
+      this.previousScreenshot();
+    } else if (isWorkspaceContext && key === 'arrowright' && this.getActiveProjectScreenshots().length > 1) {
+      event.preventDefault();
+      this.nextScreenshot();
+    }
+
+    const gazeDirections: Record<string, { x: number; y: number }> = {
+      arrowleft: { x: -12, y: 0 },
+      arrowright: { x: 12, y: 0 },
+      arrowup: { x: 0, y: -12 },
+      arrowdown: { x: 0, y: 12 },
+      j: { x: 0, y: 12 },
+      k: { x: 0, y: -12 },
+    };
+    const gaze = gazeDirections[key];
+    if (gaze) {
+      this.setEyeTarget(gaze.x, gaze.y);
+      this.resetEyeWhenIdle();
+    }
+  }
+
+  protected getProjectBufferLines(project = this.selectedProject()): ProjectInfoLine[] {
+    return [
+      { label: 'project', value: project.title },
+      { label: 'path', value: project.path },
+      { label: 'language', value: project.language },
+      { label: 'summary', value: project.description },
+      ...(project.repositoryUrl ? [{ label: 'repo', value: project.repositoryUrl, href: project.repositoryUrl }] : []),
+      ...(project.liveUrl ? [{ label: 'live', value: project.liveUrl, href: project.liveUrl }] : []),
+      { label: 'preview', value: project.screenshots.length ? `${project.screenshots.length} available` : 'unavailable' },
+    ];
+  }
+
+  protected getActiveProjectScreenshots(): string[] {
+    return this.selectedProject().screenshots;
+  }
+
+  protected getActiveProjectScreenshot(): string | null {
+    const screenshots = this.getActiveProjectScreenshots();
+    return screenshots[this.screenshotIndex()] ?? screenshots[0] ?? null;
+  }
+
+  protected getScreenshotIndicator(): string {
+    const screenshotCount = this.getActiveProjectScreenshots().length;
+    return screenshotCount ? `${this.screenshotIndex() + 1} / ${screenshotCount}` : 'no screenshots';
+  }
+
+  protected getRelativeProjectOffset(index: number): number {
+    const length = this.projectData.length;
+    const offset = (index - this.selectedProjectIndex() + length) % length;
+    return offset > length / 2 ? offset - length : offset;
+  }
+
+  protected getProjectZIndex(index: number): number {
+    return 100 - 8 * Math.abs(this.getRelativeProjectOffset(index));
+  }
+
+  protected getEyeTextOffset(index: number): string {
+    const factor = 0.18 + (index % 3) * 0.09;
+    return `${(this.eyePosition.x * factor).toFixed(2)}px ${(this.eyePosition.y * factor).toFixed(2)}px`;
+  }
+
+  protected isKeyActive(code: string): boolean {
+    return this.activeKeyCodes().includes(code) || this.scriptedKeyCode() === code;
+  }
+
+  protected getWireKeyCodes(): string[] {
+    const scripted = this.scriptedKeyCode();
+    return scripted && !this.activeKeyCodes().includes(scripted)
+      ? [...this.activeKeyCodes(), scripted]
+      : this.activeKeyCodes();
+  }
+
+  protected getHeldKeySummary(): string {
+    const codes = this.getWireKeyCodes();
+    const labels = codes.map(
+      (code) => this.keyboardRows.flat().find((key) => key.code === code)?.label || code,
+    );
+    const visible = labels.slice(0, 3).join(' + ');
+    return labels.length > 3 ? `${visible} +${labels.length - 3}` : visible || '—';
+  }
+
+  protected getKeyAnchor(code: string): { x: number; y: number } {
+    return this.keyboardRows.flat().find((key) => key.code === code)?.anchor ?? { x: 650, y: 64 };
+  }
+
+  protected getPointerPlotX(): number {
+    return this.pointerTelemetry().tracked
+      ? Number((this.pointerTelemetry().u * 1000).toFixed(2))
+      : 500;
+  }
+
+  protected getPointerPlotY(): number {
+    return this.pointerTelemetry().tracked
+      ? Number((this.pointerTelemetry().v * 128).toFixed(2))
+      : 64;
+  }
+
+  protected getWheelTransform(index: number): string {
+    const offset = this.getRelativeProjectOffset(index);
+    const layout = this.wheelLayout();
+    const angle = offset * layout.angleStep;
+    const x = layout.baseX + layout.radius * (1 - Math.cos(angle));
+    const y = layout.height / 2 + layout.radius * Math.sin(angle) - layout.cardHeight / 2;
+    const scale = offset === 0 ? WHEEL_CONFIG.selectedScale : WHEEL_CONFIG.otherScale;
+    const rotation = -angle / 2;
+    return `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${rotation.toFixed(4)}rad) scale(${scale})`;
+  }
+
+  protected getProjectShade(index: number): string {
+    const distance = Math.abs(this.getRelativeProjectOffset(index));
+    return distance === 0 ? '0' : String(WHEEL_CONFIG.shade + WHEEL_CONFIG.shadeStep * distance);
+  }
+
+  protected getProjectVisibility(index: number): 'visible' | 'hidden' {
+    if (!this.wheelLayoutReady()) {
+      return 'hidden';
+    }
+    const offset = this.getRelativeProjectOffset(index);
+    const layout = this.wheelLayout();
+    const maxVisibleOffset = window.innerWidth <= 700 ? 1 : 2;
+    if (Math.abs(offset) > maxVisibleOffset) {
+      return 'hidden';
+    }
+    const angle = offset * layout.angleStep;
+    const scale = offset === 0 ? WHEEL_CONFIG.selectedScale : WHEEL_CONFIG.otherScale;
+    const rotatedHalfHeight =
+      (Math.abs(layout.cardWidth * Math.sin(angle / 2)) +
+        Math.abs(layout.cardHeight * Math.cos(angle / 2))) *
+      scale / 2;
+    const centerY = layout.height / 2 + layout.radius * Math.sin(angle);
+    return centerY + rotatedHalfHeight < -layout.cardHeight ||
+      centerY - rotatedHalfHeight > layout.height + layout.cardHeight
+      ? 'hidden'
+      : 'visible';
+  }
+
+  private logWheelBounds(): void {
+    const wheel = this.wheelHost?.nativeElement;
+    if (!wheel) {
+      return;
+    }
+    const wheelRect = wheel.getBoundingClientRect();
+    const overflows: Array<{
+      project: string;
+      index: number;
+      k: number;
+      overflow: string;
+    }> = [];
+
+    for (const [index, card] of Array.from(wheel.querySelectorAll<HTMLElement>('.wheel-item')).entries()) {
+      const rect = card.getBoundingClientRect();
+      const sides = [
+        { side: 'left', px: wheelRect.left - rect.left },
+        { side: 'right', px: rect.right - wheelRect.right },
+        { side: 'top', px: wheelRect.top - rect.top },
+        { side: 'bottom', px: rect.bottom - wheelRect.bottom },
+      ].filter(({ px }) => px > 0.5);
+      if (sides.length) {
+        overflows.push({
+          project: card.getAttribute('aria-label') ?? 'unknown',
+          index,
+          k: this.getRelativeProjectOffset(index),
+          overflow: sides.map(({ side, px }) => `${side} ${px.toFixed(1)}px`).join(', '),
+        });
+      }
+    }
+
+    if (overflows.length) {
+      console.warn('[wheel debug] cards outside wheel bounds', {
+        wheel: { width: wheelRect.width, height: wheelRect.height },
+        cards: overflows,
+      });
+    } else {
+      console.info('[wheel debug] all card bounds inside wheel', {
+        width: wheelRect.width,
+        height: wheelRect.height,
+      });
+    }
+  }
+
+  protected selectProject(index: number): void {
+    if (!this.projectData.length) {
+      return;
+    }
+    const nextIndex = (index + this.projectData.length) % this.projectData.length;
+    const project = this.projectData[nextIndex];
+    this.selectedProjectIndex.set(nextIndex);
+    this.selectedProject.set(project);
+    this.mobileProjectMenuOpen.set(false);
+    this.screenshotIndex.set(0);
+    this.lightboxOpen.set(false);
+    this.workspacePath.set(project.path);
+    this.revealSelectedProject();
+    this.projectCardAnimation?.cancel();
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        const card = document.getElementById(`project-option-${project.id}`);
+        if (card && typeof card.animate === 'function' && !this.prefersReducedMotion()) {
+          this.projectCardAnimation = card.animate(
+            [
+              { filter: 'brightness(0.88)' },
+              { filter: 'brightness(1.18)' },
+              { filter: 'brightness(1)' },
+            ],
+            { duration: 300, easing: 'ease-out' },
+          );
+        }
+      });
+    }
+    this.typeTerminalEntries(this.getProjectTerminalEntries(project), true);
+  }
+
+  protected navigateProject(direction: number, moveFocus = false): void {
+    const current = this.selectedProjectIndex();
+    const nextIndex = (current + direction + this.projectData.length) % this.projectData.length;
+    this.selectProject(nextIndex);
+    if (moveFocus) {
+      window.requestAnimationFrame(() => {
+        document.getElementById(`project-option-${this.selectedProject().id}`)?.focus({ preventScroll: true });
+      });
+    }
+    this.setEyeTarget(direction * 8, 0);
+    this.resetEyeWhenIdle();
+  }
+
+  protected onWheelItemClick(event: MouseEvent, index: number): void {
+    if (this.suppressNextWheelClick && event.detail > 0) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.suppressNextWheelClick = false;
+      if (this.wheelClickSuppressionTimer !== null) {
+        window.clearTimeout(this.wheelClickSuppressionTimer);
+        this.wheelClickSuppressionTimer = null;
+      }
+      return;
+    }
+    this.selectProject(index);
+  }
+
+  protected toggleMobileProjectMenu(): void {
+    const opening = !this.mobileProjectMenuOpen();
+    if (opening && window.innerWidth <= 700) {
+      this.wheelLayoutReady.set(false);
+    }
+    this.mobileProjectMenuOpen.update((isOpen) => !isOpen);
+    if (this.wheelDebug()) {
+      window.requestAnimationFrame(() => {
+        this.measureWheelGeometry();
+        window.requestAnimationFrame(() => this.logWheelBounds());
+      });
+    } else if (opening) {
+      window.requestAnimationFrame(() => this.measureWheelGeometry());
+    }
+  }
+
+  protected onWheelProjectNavigate(event: WheelEvent): void {
+    if (event.deltaY === 0) {
+      return;
+    }
+    event.preventDefault();
+    if (this.wheelLocked) {
+      return;
+    }
+
+    const multiplier = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 240 : 1;
+    this.wheelDelta += event.deltaY * multiplier;
+    if (this.wheelDeltaResetTimer !== null) {
+      window.clearTimeout(this.wheelDeltaResetTimer);
+    }
+    this.wheelDeltaResetTimer = window.setTimeout(() => {
+      this.wheelDelta = 0;
+      this.wheelDeltaResetTimer = null;
+    }, 180);
+    if (Math.abs(this.wheelDelta) < 48) {
+      return;
+    }
+
+    this.navigateProject(this.wheelDelta > 0 ? 1 : -1);
+    this.wheelDelta = 0;
+    this.wheelLocked = true;
+    this.wheelUnlockTimer = window.setTimeout(() => {
+      this.wheelLocked = false;
+      this.wheelUnlockTimer = null;
+    }, 180);
+  }
+
+  protected onWheelPointerDown(event: PointerEvent): void {
+    if (event.button !== 0 || this.dragPointerId !== null) {
+      return;
+    }
+    if (this.wheelClickSuppressionTimer !== null) {
+      window.clearTimeout(this.wheelClickSuppressionTimer);
+      this.wheelClickSuppressionTimer = null;
+    }
+    this.suppressNextWheelClick = false;
+    this.dragPointerId = event.pointerId;
+    this.dragLastY = event.clientY;
+    this.dragMoved = false;
+  }
+
+  protected onWheelPointerMove(event: PointerEvent): void {
+    if (event.pointerId !== this.dragPointerId) {
+      return;
+    }
+
+    const delta = event.clientY - this.dragLastY;
+    const threshold = Math.max(36, this.wheelLayout().height * 0.08);
+    if (Math.abs(delta) < threshold) {
+      return;
+    }
+
+    if (!this.dragMoved) {
+      this.dragMoved = true;
+      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    }
+    const stepCount = Math.min(this.projectData.length, Math.floor(Math.abs(delta) / threshold));
+    const direction = delta > 0 ? -1 : 1;
+    for (let step = 0; step < stepCount; step += 1) {
+      this.navigateProject(direction);
+    }
+    this.dragLastY += Math.sign(delta) * stepCount * threshold;
+  }
+
+  protected onWheelPointerUp(event: PointerEvent): void {
+    if (event.pointerId !== this.dragPointerId) {
+      return;
+    }
+    this.dragPointerId = null;
+    this.suppressNextWheelClick = this.dragMoved;
+    if (this.wheelClickSuppressionTimer !== null) {
+      window.clearTimeout(this.wheelClickSuppressionTimer);
+      this.wheelClickSuppressionTimer = null;
+    }
+    if (this.suppressNextWheelClick) {
+      this.wheelClickSuppressionTimer = window.setTimeout(() => {
+        this.suppressNextWheelClick = false;
+        this.wheelClickSuppressionTimer = null;
+      }, 0);
+    }
+    this.dragMoved = false;
+  }
+
+  protected previousScreenshot(): void {
+    const count = this.getActiveProjectScreenshots().length;
+    if (!count) {
+      return;
+    }
+    this.screenshotIndex.set((this.screenshotIndex() + count - 1) % count);
+  }
+
+  protected nextScreenshot(): void {
+    const count = this.getActiveProjectScreenshots().length;
+    if (!count) {
+      return;
+    }
+    this.screenshotIndex.set((this.screenshotIndex() + 1) % count);
+  }
+
+  protected openLightbox(event: Event): void {
+    if (!this.getActiveProjectScreenshots().length) {
+      return;
+    }
+    this.lightboxReturnFocus = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    this.lightboxOpen.set(true);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('.lightbox-close')?.focus();
+    });
+  }
+
+  protected closeLightbox(): void {
+    this.lightboxOpen.set(false);
+    window.requestAnimationFrame(() => this.lightboxReturnFocus?.focus());
+    this.lightboxReturnFocus = null;
+  }
+
+  protected openCv(event: Event): void {
+    this.cvReturnFocus = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    this.cvSlide.set('resume');
+    this.cvOpen.set(true);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('.cv-close')?.focus();
+    });
+  }
+
+  protected closeCv(): void {
+    this.cvOpen.set(false);
+    window.requestAnimationFrame(() => this.cvReturnFocus?.focus());
+    this.cvReturnFocus = null;
+  }
+
+  protected selectCvSlide(slide: CvSlide): void {
+    this.cvSlide.set(slide);
+  }
+
+  protected getCertificateAsset(file: string): string {
+    return `certificates/${encodeURIComponent(file)}`;
+  }
+
+  private moveCvSlide(direction: 1 | -1): void {
+    const currentIndex = this.cvSlides.findIndex((slide) => slide.id === this.cvSlide());
+    const nextIndex = (currentIndex + direction + this.cvSlides.length) % this.cvSlides.length;
+    const nextSlide = this.cvSlides[nextIndex];
+    this.cvSlide.set(nextSlide.id);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(`.cv-tab[data-slide="${nextSlide.id}"]`)?.focus();
+    });
+  }
+
+  protected cycleTheme(direction: 1 | -1): void {
+    const currentIndex = this.themeNames.indexOf(this.activeTheme());
+    const nextIndex = (currentIndex + direction + this.themeNames.length) % this.themeNames.length;
+    this.switchTheme(this.themeNames[nextIndex]);
+  }
+
+  protected switchTheme(theme: ThemeName): void {
+    this.activeTheme.set(theme);
+    this.applyTheme(theme);
+    window.requestAnimationFrame(() => this.workspaceEffects?.recolor());
+  }
+
+  protected focusTerminal(): void {
+    this.focusMode.set('terminal');
+    this.setEyeTarget(10, 8);
+    this.resetEyeWhenIdle();
+  }
+
+  protected focusWheel(): void {
+    this.focusMode.set('wheel');
+    this.setEyeTarget(-10, 0);
+    this.resetEyeWhenIdle();
+  }
+
+  protected focusProjectPane(): void {
+    this.focusMode.set('pane');
+    this.setEyeTarget(10, 0);
+    this.resetEyeWhenIdle();
+  }
+
+  protected onTerminalInput(event: Event): void {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
+    this.terminalInput.set(target.value);
+    this.terminalHistoryIndex.set(null);
+    this.terminalDraft = target.value;
+  }
+
+  protected onTerminalKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.focusSelectedProject();
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.navigateTerminalHistory(-1);
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.navigateTerminalHistory(1);
+      return;
+    }
+
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    event.preventDefault();
+    const input = this.terminalInput().trim();
+    if (!input) {
+      return;
+    }
+
+    this.finishTerminalTyping();
+    const commandPath = this.workspacePath();
+    const previousProject = this.selectedProject();
+    const results = this.executeCommand(input);
+    const commandEntries: TerminalEntry[] = [
+      { kind: 'system', text: `masato@portfolio ${commandPath}` },
+      { kind: 'command', text: `› ${input}` },
+    ];
+    if (this.selectedProject() !== previousProject) {
+      this.typeTerminalEntries([
+        ...commandEntries,
+        ...results,
+        ...this.getProjectBufferLines().map((line) => ({
+          kind: 'output' as const,
+          text: `${line.label}: ${line.value}`,
+        })),
+      ], true);
+    } else {
+      this.appendTerminalEntries(commandEntries);
+      this.typeTerminalEntries(results, false);
+    }
+    this.terminalHistory.update((history) => [...history, input]);
+    this.terminalHistoryIndex.set(null);
+    this.terminalInput.set('');
+    this.terminalDraft = '';
+    this.scrollTerminalToEnd();
+  }
+
+  protected executeCommand(rawInput: string): TerminalEntry[] {
+    const input = rawInput.trim();
+    if (!input) {
+      return [];
+    }
+
+    const [command, ...args] = input.split(/\s+/);
+    const normalizedCommand = command.toLowerCase();
+    const target = args.join(' ').trim();
+
+    if (normalizedCommand === 'help') {
+      return [{
+        kind: 'output',
+        text: ['whoami', 'fetch shokomori', 'ls [links/]', 'pwd', ':e <project-path>', ':Git', ':theme <name>'].join('\n'),
+      }];
+    }
+    if (normalizedCommand === 'whoami') {
+      return [{ kind: 'output', text: 'Masato Martin\nGitHub: shokomori' }];
+    }
+    if (normalizedCommand === 'fetch') {
+      if (target && target.toLowerCase() !== 'shokomori') {
+        return [{ kind: 'error', text: `No portfolio profile found for ${target}.` }];
+      }
+      return [{
+        kind: 'output',
+        text: `Masato Martin\nprojects ${this.projectData.length}\ngithub github.com/shokomori`,
+      }];
+    }
+    if (normalizedCommand === 'pwd') {
+      return [{ kind: 'output', text: this.workspacePath() }];
+    }
+    if (normalizedCommand === 'ls') {
+      if (target === 'links/' || target === 'links') {
+        return [{ kind: 'output', text: 'github  https://github.com/shokomori' }];
+      }
+      if (target && target !== '~/Projects' && target !== '.') {
+        return [{ kind: 'error', text: `No portfolio directory named ${target}.` }];
+      }
+      return [{
+        kind: 'output',
+        text: this.projectData.map((project) => `${project.id}/`).join('  '),
+      }];
+    }
+    if (normalizedCommand === ':e') {
+      return this.handleEditorCommand(args);
+    }
+    if (normalizedCommand === ':git') {
+      const repositoryUrl = this.selectedProject().repositoryUrl;
+      return repositoryUrl
+        ? [{ kind: 'output', text: `origin ${repositoryUrl}` }]
+        : [{ kind: 'error', text: `No repository is linked for ${this.selectedProject().title}.` }];
+    }
+    if (normalizedCommand === ':theme') {
+      return this.handleThemeCommand(args);
+    }
+
+    return [{ kind: 'error', text: `command not found: ${command}. Type "help" to list workspace commands.` }];
+  }
+
+  private measureWheelGeometry(): void {
+    const wheel = this.wheelHost?.nativeElement;
+    if (!wheel) {
+      return;
+    }
+    const rect = wheel.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      return;
+    }
+
+    const styles = window.getComputedStyle(wheel);
+    const readNumber = (property: string, fallback: number): number => {
+      const value = Number.parseFloat(styles.getPropertyValue(property));
+      return Number.isFinite(value) ? value : fallback;
+    };
+    const cardWidth = readNumber('--wheel-card-width', WHEEL_CONFIG.cardWidth);
+    const cardHeight = readNumber('--wheel-card-height', WHEEL_CONFIG.cardHeight);
+    const isMobileDrawer = window.innerWidth <= 700 && this.mobileProjectMenuOpen();
+    const baseX = isMobileDrawer
+      ? Math.max(0, (rect.width - cardWidth) / 2)
+      : WHEEL_CONFIG.baseX;
+    const maxVisibleOffset = isMobileDrawer ? 1 : 2;
+    const angleStep = isMobileDrawer ? WHEEL_CONFIG.mobileAngleStep : WHEEL_CONFIG.angleStep;
+    let radius: number = WHEEL_CONFIG.radius;
+
+    for (let offset = -maxVisibleOffset; offset <= maxVisibleOffset; offset += 1) {
+      const angle = offset * angleStep;
+      const scale = offset === 0 ? WHEEL_CONFIG.selectedScale : WHEEL_CONFIG.otherScale;
+      const halfWidth =
+        (Math.abs(cardWidth * Math.cos(angle / 2)) +
+          Math.abs(cardHeight * Math.sin(angle / 2))) *
+        scale / 2;
+      const halfHeight =
+        (Math.abs(cardWidth * Math.sin(angle / 2)) +
+          Math.abs(cardHeight * Math.cos(angle / 2))) *
+        scale / 2;
+      const xTravel = 1 - Math.cos(angle);
+      const yTravel = Math.abs(Math.sin(angle));
+      if (xTravel > 0) {
+        radius = Math.min(
+          radius,
+          (rect.width - baseX - cardWidth / 2 - halfWidth - 2) / xTravel,
+        );
+      }
+      if (yTravel > 0) {
+        radius = Math.min(radius, (rect.height / 2 - halfHeight - 2) / yTravel);
+      }
+    }
+
+    this.wheelLayout.set({
+      width: rect.width,
+      height: rect.height,
+      cardWidth,
+      cardHeight,
+      radius: Math.max(0, radius),
+      angleStep,
+      baseX,
+    });
+    this.wheelLayoutReady.set(true);
+    this.drawWheelInk();
+  }
+
+  private drawWheelInk(): void {
+    const canvas = this.wheelInk?.nativeElement;
+    const layout = this.wheelLayout();
+    if (!canvas || layout.width === 0 || layout.height === 0) {
+      return;
+    }
+
+    const dpr = Math.min(window.devicePixelRatio || 1, WHEEL_CONFIG.maxDpr);
+    const canvasWidth = layout.width + WHEEL_CONFIG.leftBleed;
+    canvas.width = Math.round(canvasWidth * dpr);
+    canvas.height = Math.round(layout.height * dpr);
+    if (typeof CanvasRenderingContext2D === 'undefined') {
+      return;
+    }
     const context = canvas.getContext('2d');
     if (!context) {
       return;
     }
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    context.clearRect(0, 0, canvasWidth, layout.height);
+    context.strokeStyle = window.getComputedStyle(this.wheelHost!.nativeElement).getPropertyValue('--dim').trim();
+    context.lineWidth = 1;
+    context.globalAlpha = 0.6;
 
-    this.backgroundContext = context;
-    this.backgroundCanvas = canvas;
-
-    this.resizeCanvas();
-    this.buildNodes(canvas);
-    this.handleScroll();
-
-    window.addEventListener('mousemove', this.handleMouseMove);
-    window.addEventListener('resize', this.handleResize);
-
-    this.startBackgroundAnimation();
+    const centerX = layout.baseX + layout.radius + layout.cardWidth / 2 + WHEEL_CONFIG.leftBleed;
+    const centerY = layout.height / 2;
+    const maxVisibleOffset = window.innerWidth <= 700 ? 1 : 2;
+    context.beginPath();
+    for (let step = 0; step <= 96; step += 1) {
+      const angle = ((step / 96) * 2 - 1) * maxVisibleOffset * layout.angleStep;
+      const x = centerX - layout.radius * Math.cos(angle);
+      const y = centerY + layout.radius * Math.sin(angle);
+      if (step === 0) {
+        context.moveTo(x, y);
+      } else {
+        context.lineTo(x, y);
+      }
+    }
+    context.stroke();
+    for (let offset = -maxVisibleOffset; offset <= maxVisibleOffset; offset += 1) {
+      const angle = offset * layout.angleStep;
+      const x = centerX - layout.radius * Math.cos(angle);
+      const y = centerY + layout.radius * Math.sin(angle);
+      context.beginPath();
+      context.moveTo(x - 3, y);
+      context.lineTo(x + 3, y);
+      context.stroke();
+    }
+    context.globalAlpha = 1;
   }
 
-  private startBackgroundAnimation(): void {
-    if (!this.backgroundContext || !this.backgroundCanvas || this.animationFrameId) {
+  private measureEyeBounds(): void {
+    const eyeHost = this.eyeHost?.nativeElement;
+    if (!eyeHost) {
       return;
     }
 
-    const animate = (): void => {
-      if (!this.backgroundContext || !this.backgroundCanvas) {
-        this.animationFrameId = 0;
-        return;
-      }
-      this.drawFrame(this.backgroundContext, this.backgroundCanvas);
-      this.animationFrameId = requestAnimationFrame(animate);
+    const rect = eyeHost.getBoundingClientRect();
+    this.eyeBounds = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    const shell = eyeHost.querySelector<HTMLElement>('.eye-shell');
+    const pupil = eyeHost.querySelector<HTMLElement>('.eye-pupil');
+    if (shell && pupil) {
+      const shellRect = shell.getBoundingClientRect();
+      const pupilRect = pupil.getBoundingClientRect();
+      this.eyeTravel = Math.max(4, Math.min(14, (shellRect.width - pupilRect.width) / 2 - 4));
+    }
+  }
+
+  private lookTowardPointer(clientX: number, clientY: number): void {
+    if (!this.eyeBounds.width || !this.eyeBounds.height) {
+      this.measureEyeBounds();
+    }
+    if (!this.eyeBounds.width || !this.eyeBounds.height) {
+      return;
+    }
+
+    const dx = clientX - (this.eyeBounds.left + this.eyeBounds.width / 2);
+    const dy = clientY - (this.eyeBounds.top + this.eyeBounds.height / 2);
+    const distance = Math.hypot(dx, dy);
+    const travel = Math.min(1, distance / 180) * this.eyeTravel;
+    this.setEyeTarget(
+      distance ? (dx / distance) * travel : 0,
+      distance ? (dy / distance) * travel : 0,
+    );
+  }
+
+  private setEyeTarget(x: number, y: number): void {
+    this.eyeTarget = {
+      x: Math.max(-this.eyeTravel, Math.min(this.eyeTravel, x)),
+      y: Math.max(-this.eyeTravel, Math.min(this.eyeTravel, y)),
     };
-
-    animate();
+    this.eyePosition = { ...this.eyeTarget };
+    this.updateEyeTransform();
   }
 
-  private resizeCanvas(): void {
-    const canvas = this.bgCanvas?.nativeElement;
-    if (!canvas) {
+  private updatePointerTelemetry(x: number, y: number, type: string): void {
+    this.pointerPosition = { x, y, type };
+    const viewportWidth = Math.max(1, window.innerWidth);
+    const viewportHeight = Math.max(1, window.innerHeight);
+    const next: PointerTelemetry = {
+      x: Math.round(x),
+      y: Math.round(y),
+      u: Math.round(Math.max(0, Math.min(1, x / viewportWidth)) * 1000) / 1000,
+      v: Math.round(Math.max(0, Math.min(1, y / viewportHeight)) * 1000) / 1000,
+      type,
+      tracked: true,
+    };
+    const current = this.pointerTelemetry();
+    if (
+      current.x === next.x &&
+      current.y === next.y &&
+      current.u === next.u &&
+      current.v === next.v &&
+      current.type === next.type
+    ) {
       return;
     }
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    this.pointerTelemetry.set(next);
+    this.updateEyeReadout();
   }
 
-  private buildNodes(canvas: HTMLCanvasElement): void {
-    this.canvasNodes.length = 0;
-    const mode = this.activeParticleMode();
-    const count =
-      mode === 'nebula'
-        ? Math.min(64, Math.max(28, Math.floor(canvas.width / 30)))
-        : mode === 'comet'
-          ? Math.min(120, Math.max(54, Math.floor(canvas.width / 20)))
-          : Math.min(80, Math.max(36, Math.floor(canvas.width / 24)));
-    const velocityFactor = mode === 'comet' ? 0.55 : mode === 'nebula' ? 0.22 : 0.35;
-    const baseSize = mode === 'nebula' ? 2.2 : mode === 'comet' ? 1.5 : 1.8;
-
-    for (let i = 0; i < count; i += 1) {
-      this.canvasNodes.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * velocityFactor,
-        vy: (Math.random() - 0.5) * velocityFactor,
-        size: baseSize + Math.random() * (mode === 'nebula' ? 2 : 0.9),
-        alpha: 0.45 + Math.random() * 0.55,
-      });
+  private setPointerButtons(buttonMask: number): void {
+    const buttons = [0, 1, 2].filter((button) => (buttonMask & (1 << button)) !== 0);
+    const current = this.pointerButtons();
+    if (current.length === buttons.length && current.every((button, index) => button === buttons[index])) {
+      return;
     }
+    this.pointerButtons.set(buttons);
   }
 
-  private drawFrame(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
-    const mode = this.activeParticleMode();
-
-    if (mode === 'comet') {
-      context.fillStyle = 'rgba(10, 10, 15, 0.16)';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-    } else {
-      context.clearRect(0, 0, canvas.width, canvas.height);
+  private getKeyCodeFromKey(key: string): string {
+    if (key.length === 1 && /[a-z]/i.test(key)) {
+      return `Key${key.toUpperCase()}`;
     }
-
-    const pointerX = this.mouseX();
-    const pointerY = this.mouseY();
-    const scrollMomentum = this.scrollMomentum;
-    const scrollLerp = this.scrollProgress() / 100;
-    let nodeHot = false;
-
-    context.save();
-    context.translate(0, Math.sin(scrollLerp * Math.PI) * 4);
-
-    if (mode === 'nebula') {
-      const nebulaGradient = context.createRadialGradient(pointerX, pointerY, 20, pointerX, pointerY, 180);
-      nebulaGradient.addColorStop(0, 'rgba(127, 106, 240, 0.08)');
-      nebulaGradient.addColorStop(1, 'rgba(127, 106, 240, 0)');
-      context.fillStyle = nebulaGradient;
-      context.beginPath();
-      context.arc(pointerX, pointerY, 180, 0, Math.PI * 2);
-      context.fill();
+    if (key.length === 1 && /[0-9]/.test(key)) {
+      return `Digit${key}`;
     }
-
-    for (const node of this.canvasNodes) {
-      const scrollShift = mode === 'comet' ? 0.2 : mode === 'nebula' ? 0.08 : 0.12;
-      node.x += Math.sin((node.y + scrollLerp * 180) / 150) * scrollMomentum * (mode === 'nebula' ? 0.02 : 0.04);
-      node.y += scrollMomentum * scrollShift;
-      node.x += node.vx;
-      node.y += node.vy;
-
-      if (node.x <= 0 || node.x >= canvas.width) {
-        node.vx *= -1;
-        node.x = Math.max(0, Math.min(canvas.width, node.x));
-      }
-      if (node.y <= 0 || node.y >= canvas.height) {
-        node.vy *= -1;
-        node.y = Math.max(0, Math.min(canvas.height, node.y));
-      }
-
-      const dx = node.x - pointerX;
-      const dy = node.y - pointerY;
-      const distance = Math.hypot(dx, dy);
-      if (distance < (mode === 'nebula' ? 48 : 34)) {
-        nodeHot = true;
-      }
-      const interactionRadius = mode === 'nebula' ? 180 : mode === 'comet' ? 100 : 120;
-      if (distance < interactionRadius && distance > 0) {
-        const force = (interactionRadius - distance) / (mode === 'comet' ? 1400 : 1200);
-        node.vx += (dx / distance) * force;
-        node.vy += (dy / distance) * force;
-      }
-
-      node.vx += (Math.random() - 0.5) * (mode === 'nebula' ? 0.007 : 0.01);
-      node.vy += (Math.random() - 0.5) * (mode === 'nebula' ? 0.007 : 0.01);
-      node.vx *= mode === 'comet' ? 0.992 : 0.995;
-      node.vy *= mode === 'comet' ? 0.992 : 0.995;
-
-      const speed = Math.hypot(node.vx, node.vy);
-      if (speed < (mode === 'nebula' ? 0.03 : 0.05)) {
-        const angle = Math.random() * Math.PI * 2;
-        const minSpeed = mode === 'comet' ? 0.12 : 0.08;
-        node.vx = Math.cos(angle) * minSpeed;
-        node.vy = Math.sin(angle) * minSpeed;
-      }
-      if (speed > (mode === 'comet' ? 0.95 : 0.65)) {
-        node.vx *= 0.9;
-        node.vy *= 0.9;
-      }
-
-      node.x = Math.max(0, Math.min(canvas.width, node.x));
-      node.y = Math.max(0, Math.min(canvas.height, node.y));
+    if (key === ' ') {
+      return 'Space';
     }
-
-    if (mode !== 'nebula') {
-      const maxDistance = mode === 'comet' ? 95 : 150;
-      context.lineWidth = mode === 'comet' ? 0.45 : 0.6;
-      for (let i = 0; i < this.canvasNodes.length; i += 1) {
-        for (let j = i + 1; j < this.canvasNodes.length; j += 1) {
-          const a = this.canvasNodes[i];
-          const b = this.canvasNodes[j];
-          const distance = Math.hypot(a.x - b.x, a.y - b.y);
-          if (distance < maxDistance) {
-            const alpha = 1 - distance / maxDistance;
-            const boost = 1 + Math.min(1, Math.abs(scrollMomentum) / 2.2) * 0.9;
-            context.strokeStyle =
-              mode === 'comet'
-                ? `rgba(240, 112, 96, ${alpha * 0.22 * boost})`
-                : `rgba(129, 189, 255, ${alpha * 0.2 * boost})`;
-            context.beginPath();
-            context.moveTo(a.x, a.y);
-            context.lineTo(b.x, b.y);
-            context.stroke();
-          }
-        }
-      }
-    }
-
-    for (const node of this.canvasNodes) {
-      const motionBoost = Math.min(0.45, Math.abs(scrollMomentum) * 0.08);
-
-      if (mode === 'nebula') {
-        context.fillStyle = `rgba(129, 189, 255, ${(0.18 + motionBoost) * node.alpha})`;
-        context.beginPath();
-        context.arc(node.x, node.y, node.size * 2.1, 0, Math.PI * 2);
-        context.fill();
-        context.fillStyle = `rgba(61, 214, 163, ${(0.08 + motionBoost * 0.6) * node.alpha})`;
-        context.beginPath();
-        context.arc(node.x, node.y, node.size, 0, Math.PI * 2);
-        context.fill();
-        continue;
-      }
-
-      if (mode === 'comet') {
-        const tailLength = Math.min(16, Math.hypot(node.vx, node.vy) * 26 + 4);
-        context.strokeStyle = `rgba(240, 112, 96, ${(0.26 + motionBoost) * node.alpha})`;
-        context.lineWidth = Math.max(0.8, node.size * 0.55);
-        context.beginPath();
-        context.moveTo(node.x, node.y);
-        context.lineTo(node.x - node.vx * tailLength, node.y - node.vy * tailLength);
-        context.stroke();
-      }
-
-      const nodeGlow = 0.55 + motionBoost;
-      const baseColor = mode === 'comet' ? '240, 112, 96' : '130, 228, 255';
-      context.fillStyle = `rgba(${baseColor}, ${nodeGlow * node.alpha})`;
-      context.beginPath();
-      context.arc(node.x, node.y, node.size, 0, Math.PI * 2);
-      context.fill();
-    }
-
-    if (this.cursorNodeHot() !== nodeHot) {
-      this.cursorNodeHot.set(nodeHot);
-    }
-
-    context.restore();
+    const aliases: Record<string, string> = {
+      Esc: 'Escape',
+      Left: 'ArrowLeft',
+      Right: 'ArrowRight',
+      Up: 'ArrowUp',
+      Down: 'ArrowDown',
+      Control: 'ControlLeft',
+      Shift: 'ShiftLeft',
+      Alt: 'AltLeft',
+      Meta: 'MetaLeft',
+    };
+    return aliases[key] ?? key;
   }
 
-  private showToast(kind: ToastState['kind'], message: string): void {
-    this.feedbackToast.set({ kind, message });
-    if (this.feedbackToastTimer) {
-      window.clearTimeout(this.feedbackToastTimer);
-    }
-    this.feedbackToastTimer = window.setTimeout(() => {
-      this.feedbackToast.set(null);
-    }, 3800);
+  private updateEyeTransform(): void {
+    this.eyeTransform.set(
+      `translate(${this.eyePosition.x.toFixed(2)}px, ${this.eyePosition.y.toFixed(2)}px)`,
+    );
+    this.updateEyeReadout();
   }
 
-  private syncActiveSectionWithViewport(): void {
-    if (!this.sectionElements.length) {
+  private updateEyeReadout(): void {
+    const pointer = this.pointerTelemetry();
+    const normalized = pointer.tracked ? `${pointer.u.toFixed(3)}, ${pointer.v.toFixed(3)}` : '--, --';
+    this.eyeReadout.set(
+      `PUPIL · ${this.focusMode()} · ${this.eyePosition.x.toFixed(2)}, ${this.eyePosition.y.toFixed(2)} · UV ${normalized}`,
+    );
+  }
+
+  private revealSelectedProject(): void {
+    const pane = this.projectPane?.nativeElement;
+    if (!pane || typeof pane.animate !== 'function' || this.prefersReducedMotion()) {
       return;
     }
 
-    const anchorY = 110;
-    let active: HTMLElement | null = null;
-
-    for (const section of this.sectionElements) {
-      const rect = section.getBoundingClientRect();
-      if (rect.top <= anchorY && rect.bottom > anchorY) {
-        active = section;
-      }
-    }
-
-    if (!active) {
-      active =
-        this.sectionElements.find((section) => section.getBoundingClientRect().top > anchorY) ??
-        this.sectionElements[this.sectionElements.length - 1];
-    }
-
-    if (active && this.activeSection() !== active.id) {
-      this.activeSection.set(active.id);
-    }
+    this.projectRevealAnimation?.cancel();
+    this.projectRevealAnimation = pane.animate(
+      [
+        { clipPath: 'inset(0 100% 0 0)', opacity: 0.48 },
+        { clipPath: 'inset(0 0 0 0)', opacity: 1 },
+      ],
+      { duration: 420, easing: 'cubic-bezier(0.2, 0.72, 0.24, 1)' },
+    );
   }
 
-  private inferCertificationCategory(card: HTMLElement): CertificationCategory {
-    const provider = card.querySelector('.cert-provider')?.textContent?.toLowerCase() ?? '';
-    const title = card.querySelector('.cert-title')?.textContent?.toLowerCase() ?? '';
-    const combined = `${provider} ${title}`;
-
-    if (combined.includes('ux') || combined.includes('wireframe') || combined.includes('figma') || combined.includes('ui')) {
-      return 'uiux';
+  private resetEyeWhenIdle(): void {
+    if (this.eyeIdleTimer !== null) {
+      window.clearTimeout(this.eyeIdleTimer);
     }
+    this.eyeIdleTimer = window.setTimeout(() => {
+      this.eyeIdleTimer = null;
+      this.setEyeTarget(0, 0);
+    }, 1500);
+  }
 
-    if (combined.includes('cloud') || combined.includes('aws') || combined.includes('google cloud')) {
-      return 'cloud';
+  private returnEyeToRest(): void {
+    if (this.eyeIdleTimer !== null) {
+      window.clearTimeout(this.eyeIdleTimer);
+      this.eyeIdleTimer = null;
+    }
+    this.setEyeTarget(0, 0);
+  }
+
+  private prefersReducedMotion(): boolean {
+    return (
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    );
+  }
+
+  private isEditableTarget(target: EventTarget | null): boolean {
+    return (
+      target instanceof HTMLElement &&
+      (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+    );
+  }
+
+  private appendTerminalEntries(entries: TerminalEntry[]): void {
+    this.terminalEntries.update((current) => [...current, ...entries].slice(-100));
+  }
+
+  private typeTerminalEntries(entries: TerminalEntry[], replace: boolean): void {
+    if (this.terminalTypingTimer !== null) {
+      window.clearTimeout(this.terminalTypingTimer);
+      this.terminalTypingTimer = null;
+    }
+    this.terminalTypingQueue = [];
+    this.terminalTypingCurrent = null;
+    this.terminalTypingPosition = 0;
+
+    if (replace) {
+      this.terminalEntries.set([]);
     }
 
     if (
-      combined.includes('ai') ||
-      combined.includes('data science') ||
-      combined.includes('generative') ||
-      combined.includes('blockchain')
+      typeof window === 'undefined' ||
+      this.prefersReducedMotion() ||
+      (typeof document !== 'undefined' && document.visibilityState === 'hidden')
     ) {
-      return 'ai';
+      this.appendTerminalEntries(entries);
+      this.terminalTyping.set(false);
+      this.workspaceEffects?.setAutoTyping(false);
+      this.scrollTerminalToEnd();
+      return;
     }
 
-    if (combined.includes('project management')) {
-      return 'pm';
+    this.terminalTypingQueue.push(...entries);
+    if (this.terminalTypingQueue.length === 0) {
+      this.terminalTyping.set(false);
+      this.workspaceEffects?.setAutoTyping(false);
+      return;
     }
 
-    if (combined.includes('unreal') || combined.includes('game')) {
-      return 'game';
-    }
-
-    return 'web';
+    this.terminalTyping.set(true);
+    this.workspaceEffects?.setAutoTyping(true);
+    this.revealNextTerminalCharacter();
   }
 
-  private applyCertificationFilter(): void {
-    const selected = this.selectedCertificationCategory();
-    const cards = document.querySelectorAll<HTMLElement>('.cert-grid .cert-card');
+  private revealNextTerminalCharacter(): void {
+    if (this.terminalTypingCurrent === null) {
+      this.terminalTypingCurrent = this.terminalTypingQueue.shift() ?? null;
+      this.terminalTypingPosition = 0;
+      if (this.terminalTypingCurrent === null) {
+        this.terminalTyping.set(false);
+        this.workspaceEffects?.setAutoTyping(false);
+        this.workspaceEffects?.setUpcoming('');
+        this.terminalTypingTimer = null;
+        this.scrollTerminalToEnd();
+        return;
+      }
+      this.terminalEntries.update((current) => [
+        ...current,
+        { kind: this.terminalTypingCurrent!.kind, text: '' },
+      ].slice(-100));
+    }
 
-    for (const card of cards) {
-      const category = this.inferCertificationCategory(card);
-      const shouldShow = selected === 'all' || category === selected;
-      card.classList.toggle('is-filtered-out', !shouldShow);
-      card.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
+    const entry = this.terminalTypingCurrent;
+    if (!entry) {
+      return;
+    }
+    if (this.terminalTypingPosition >= entry.text.length) {
+      this.terminalTypingCurrent = null;
+      this.scrollTerminalToEnd();
+      this.terminalTypingTimer = window.setTimeout(() => this.revealNextTerminalCharacter(), 70);
+      return;
+    }
+
+    const character = entry.text[this.terminalTypingPosition++];
+    this.showScriptedKey(character);
+    this.workspaceEffects?.setUpcoming([
+      entry.text.slice(this.terminalTypingPosition),
+      ...this.terminalTypingQueue.map((queued) => queued.text),
+    ].join('\n'));
+    this.terminalEntries.update((current) => {
+      const lastIndex = current.length - 1;
+      const lastEntry = current[lastIndex];
+      if (!lastEntry) {
+        return current;
+      }
+      const next = [...current];
+      next[lastIndex] = { ...lastEntry, text: lastEntry.text + character };
+      return next;
+    });
+    if (character === '\n' || this.terminalTypingPosition % 12 === 0) {
+      this.scrollTerminalToEnd();
+    }
+    const delay = entry.kind === 'output' ? 8 : 12;
+    this.terminalTypingTimer = window.setTimeout(() => this.revealNextTerminalCharacter(), delay);
+  }
+
+  private finishTerminalTyping(): void {
+    if (this.terminalTypingTimer !== null) {
+      window.clearTimeout(this.terminalTypingTimer);
+      this.terminalTypingTimer = null;
+    }
+
+    if (this.terminalTypingCurrent) {
+      const currentEntry = this.terminalTypingCurrent;
+      this.terminalEntries.update((entries) => {
+        const lastIndex = entries.length - 1;
+        if (lastIndex < 0) {
+          return [...entries, currentEntry];
+        }
+        const next = [...entries];
+        next[lastIndex] = currentEntry;
+        return next;
+      });
+    }
+    const completed = this.terminalTypingQueue;
+    this.terminalTypingCurrent = null;
+    this.terminalTypingQueue = [];
+    this.terminalTypingPosition = 0;
+    this.appendTerminalEntries(completed);
+    this.terminalTyping.set(false);
+    this.workspaceEffects?.setAutoTyping(false);
+    this.workspaceEffects?.setUpcoming('');
+    if (this.scriptedKeyTimer !== null) {
+      window.clearTimeout(this.scriptedKeyTimer);
+      this.scriptedKeyTimer = null;
+    }
+    this.scriptedKeyCode.set(null);
+  }
+
+  private showScriptedKey(character: string): void {
+    if (this.scriptedKeyTimer !== null) {
+      window.clearTimeout(this.scriptedKeyTimer);
+      this.scriptedKeyTimer = null;
+    }
+    const code = this.getKeyCodeForCharacter(character);
+    this.scriptedKeyCode.set(code);
+    if (code) {
+      const shifted = /[A-Z!@#$%^&*()_+:{|}<>?~"]/.test(character);
+      if (shifted) {
+        const shiftCode = this.getKeyCodeForCharacter(character) && this.isRightHandCode(code)
+          ? 'ShiftLeft'
+          : 'ShiftRight';
+        this.workspaceEffects?.pressKey(shiftCode);
+      }
+      this.workspaceEffects?.pressKey(code);
+    }
+    this.scriptedKeyTimer = window.setTimeout(() => {
+      this.scriptedKeyCode.set(null);
+      this.scriptedKeyTimer = null;
+    }, 58);
+  }
+
+  private getKeyCodeForCharacter(character: string): string | null {
+    if (/[a-z]/i.test(character)) {
+      return `Key${character.toUpperCase()}`;
+    }
+    if (/[0-9]/.test(character)) {
+      return `Digit${character}`;
+    }
+    const symbols: Record<string, string> = {
+      ' ': 'Space',
+      '\n': 'Enter',
+      '.': 'Period',
+      ',': 'Comma',
+      ':': 'Semicolon',
+      ';': 'Semicolon',
+      '/': 'Slash',
+      '-': 'Minus',
+      '_': 'Minus',
+      '=': 'Equal',
+      '\'': 'Quote',
+      '"': 'Quote',
+      '`': 'Backquote',
+      '~': 'Backquote',
+      '[': 'BracketLeft',
+      ']': 'BracketRight',
+      '\\': 'Backslash',
+      '>': 'Period',
+      '<': 'Comma',
+      '+': 'Equal',
+      '{': 'BracketLeft',
+      '}': 'BracketRight',
+      '|': 'Backslash',
+      '?': 'Slash',
+      '!': 'Digit1',
+      '@': 'Digit2',
+      '#': 'Digit3',
+      '$': 'Digit4',
+      '%': 'Digit5',
+      '^': 'Digit6',
+      '&': 'Digit7',
+      '*': 'Digit8',
+      '(': 'Digit9',
+      ')': 'Digit0',
+    };
+    return symbols[character] ?? null;
+  }
+
+  private isRightHandCode(code: string): boolean {
+    return ['Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus', 'Equal', 'Backspace',
+      'KeyY', 'KeyU', 'KeyI', 'KeyO', 'KeyP', 'BracketLeft', 'BracketRight', 'Backslash',
+      'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon', 'Quote', 'Enter', 'KeyN', 'KeyM',
+      'Comma', 'Period', 'Slash', 'ShiftRight', 'Space'].includes(code);
+  }
+
+  private scrollTerminalToEnd(): void {
+    window.requestAnimationFrame(() => {
+      const output = this.terminalOutput?.nativeElement;
+      if (output) {
+        output.scrollTop = output.scrollHeight;
+      }
+    });
+  }
+
+  private activateProject(): void {
+    this.projectPane?.nativeElement.focus({ preventScroll: true });
+  }
+
+  private focusSelectedProject(): void {
+    const selectedOption = document.getElementById(`project-option-${this.selectedProject().id}`);
+    selectedOption?.focus({ preventScroll: true });
+  }
+
+  private handleThemeCommand(args: string[]): TerminalEntry[] {
+    const requested = args[0]?.toLowerCase();
+    if (!requested) {
+      return [{ kind: 'error', text: `Usage: :theme <${this.themeNames.join('|')}>` }];
+    }
+
+    const nextTheme = this.themeNames.find((theme) => theme === requested);
+    if (!nextTheme) {
+      return [{ kind: 'error', text: `Theme not available: ${requested}.` }];
+    }
+
+    this.switchTheme(nextTheme);
+    return [{ kind: 'output', text: `theme ${nextTheme}` }];
+  }
+
+  private handleEditorCommand(args: string[]): TerminalEntry[] {
+    const target = args.join(' ').trim();
+    if (!target) {
+      return [{ kind: 'error', text: 'Usage: :e ~/Projects/<project>' }];
+    }
+
+    const normalized = target.replace(/\/+$/, '').trim();
+    const projectPath = normalized.startsWith('~/Projects/')
+      ? normalized.slice('~/Projects/'.length)
+      : normalized;
+
+    const match = this.projectData.find(
+      (project) =>
+        project.id.toLowerCase() === projectPath.toLowerCase() ||
+        project.title.toLowerCase() === projectPath.toLowerCase(),
+    );
+
+    if (!match || !normalized.startsWith('~/Projects/')) {
+      return [{ kind: 'error', text: `No project at ${normalized}.` }];
+    }
+
+    this.selectProject(this.projectData.indexOf(match));
+    return [{ kind: 'output', text: this.workspacePath() }];
+  }
+
+  private getProjectTerminalEntries(project = this.selectedProject()): TerminalEntry[] {
+    return [
+      { kind: 'system', text: `masato@portfolio ${project.path}` },
+      { kind: 'command', text: `› :e ${project.path}` },
+      ...this.getProjectBufferLines(project).map((line) => ({
+        kind: 'output' as const,
+        text: `${line.label}: ${line.value}`,
+      })),
+    ];
+  }
+
+  private navigateTerminalHistory(direction: -1 | 1): void {
+    const history = this.terminalHistory();
+    if (!history.length) {
+      return;
+    }
+
+    const currentIndex = this.terminalHistoryIndex();
+    if (direction === -1) {
+      if (currentIndex === null) {
+        this.terminalDraft = this.terminalInput();
+        this.terminalHistoryIndex.set(history.length - 1);
+      } else {
+        this.terminalHistoryIndex.set(Math.max(0, currentIndex - 1));
+      }
+      this.terminalInput.set(history[this.terminalHistoryIndex() ?? history.length - 1]);
+      return;
+    }
+
+    if (currentIndex === null) {
+      return;
+    }
+    if (currentIndex >= history.length - 1) {
+      this.terminalHistoryIndex.set(null);
+      this.terminalInput.set(this.terminalDraft);
+      return;
+    }
+    const nextIndex = currentIndex + 1;
+    this.terminalHistoryIndex.set(nextIndex);
+    this.terminalInput.set(history[nextIndex]);
+  }
+
+  private resolveStoredTheme(): ThemeName {
+    if (typeof window === 'undefined') {
+      return 'black';
+    }
+
+    const saved = window.localStorage.getItem('portfolio-theme');
+    if (saved && this.themeNames.includes(saved as ThemeName)) {
+      return saved as ThemeName;
+    }
+
+    return 'black';
+  }
+
+  private applyTheme(theme: ThemeName): void {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('portfolio-theme', theme);
+      window.requestAnimationFrame(() => this.drawWheelInk());
     }
   }
 }

@@ -98,3 +98,26 @@ npm run preview:dist
 ```bash
 npm run deploy:manual
 ```
+
+## Portfolio workspace
+
+The project list in `src/app/app.ts` is the source of truth for the wheel, project pane, terminal transcript, repository links, and active-project status. Project paths under `~/Projects/` are virtual portfolio paths; they are not claims about files present on the visitor's machine.
+
+The command input supports:
+
+- `whoami` and `fetch shokomori` for the portfolio identity and curated project count.
+- `ls` and `ls links/` for the project and public GitHub link listings.
+- `pwd` for the selected portfolio project's virtual path.
+- `:e ~/Projects/<project-id>` to select a project and refresh its details.
+- `:Git` to display the selected project's GitHub repository URL.
+- `:theme <name>` to select one of the portfolio's available themes.
+
+The colon shortcut focuses the command input and seeds the `:` prefix. Unsupported commands and invalid project paths return explicit errors. Portfolio output intentionally avoids GitHub activity figures or biography claims that are not supported by the project's data.
+
+## CV and credentials
+
+The `cv` control opens a portfolio pop-out with `whoami`, `certifications`, and an embedded CV PDF slide. The PDF can also be opened in its own browser tab. Certificate image files are maintained in `certificates/` and copied into the site output by the Angular asset configuration.
+
+## Reference verification scope
+
+The live reference was observed rendering a project-and-section wheel, its `whoami`, `fetch`, and `ls links/` entries, and navigation with `:e` to a section path. The prompt styling, project navigation hints, and status indicators were also visible. Its owner-specific text, statistics, theme command outcomes, command history, invalid-command responses, and screenshot-opening states were not exhaustively verified and are not represented as Masato's information. The portfolio uses its own verified project data with the observed workspace interaction conventions.

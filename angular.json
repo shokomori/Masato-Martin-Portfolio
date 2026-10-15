@@ -27,6 +27,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "**/*",
+                "input": "certificates",
+                "output": "certificates"
               }
             ],
             "styles": ["src/styles.scss"]
