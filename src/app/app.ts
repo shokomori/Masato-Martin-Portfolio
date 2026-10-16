@@ -16,12 +16,21 @@ type TerminalKind = 'command' | 'output' | 'error' | 'system';
 type TerminalEntry = {
   kind: TerminalKind;
   text: string;
+  href?: string;
 };
 
 type ProjectInfoLine = {
   label: string;
   value: string;
   href?: string;
+};
+
+type ProjectPreview = {
+  src: string;
+  label: string;
+  alt: string;
+  kind: 'screenshot' | 'artwork';
+  fit?: 'contain' | 'cover';
 };
 
 type PortfolioProject = {
@@ -32,7 +41,7 @@ type PortfolioProject = {
   language: string;
   repositoryUrl?: string;
   liveUrl?: string;
-  screenshots: string[];
+  previews: ProjectPreview[];
 };
 
 type KeyboardVisualKey = {
@@ -53,6 +62,7 @@ type PointerTelemetry = {
 };
 
 type CvSlide = 'whoami' | 'certifications' | 'resume';
+type IntroStage = 'complete' | 'monogram' | 'boot' | 'editor' | 'typing' | 'handoff';
 
 type Certificate = {
   title: string;
@@ -112,6 +122,10 @@ function createKeyboardRow(
 export class App implements AfterViewInit, OnDestroy {
   protected readonly themeNames: ThemeName[] = ['black', 'violet', 'green', 'amber', 'blue', 'light'];
   protected readonly activeTheme = signal<ThemeName>('black');
+  protected readonly introStage = signal<IntroStage>('complete');
+  protected readonly introTypedLength = signal(0);
+  protected readonly introLogLines = signal(0);
+  protected readonly introActive = signal(false);
   protected readonly workspacePath = signal('~/Projects');
   protected readonly focusMode = signal<'wheel' | 'pane' | 'terminal'>('wheel');
   protected readonly terminalInput = signal('');
@@ -127,7 +141,26 @@ export class App implements AfterViewInit, OnDestroy {
       language: 'HTML',
       repositoryUrl: 'https://github.com/shokomori/Lorekeeper',
       liveUrl: 'https://shokomori.github.io/Lorekeeper/',
-      screenshots: [],
+      previews: [
+        {
+          src: 'previews/lorekeeper-landing-cover.jpg',
+          label: 'Campaign landing page',
+          alt: 'Lorekeeper campaign landing page with the project logo and fantasy artwork.',
+          kind: 'screenshot',
+        },
+        {
+          src: 'previews/lorekeeper-dashboard-empty.jpg',
+          label: 'Campaign dashboard',
+          alt: 'Lorekeeper campaign dashboard showing the campaign navigation, dashboard, and campaign summary.',
+          kind: 'screenshot',
+        },
+        {
+          src: 'previews/lorekeeper-sessions.jpg',
+          label: 'Campaign sessions',
+          alt: 'Lorekeeper sessions page showing a saved campaign session.',
+          kind: 'screenshot',
+        },
+      ],
     },
     {
       id: 'tekken-pitch-deck',
@@ -136,7 +169,15 @@ export class App implements AfterViewInit, OnDestroy {
       description: 'A presentation project centered on a Tekken pitch deck.',
       language: 'HTML',
       repositoryUrl: 'https://github.com/shokomori/Tekken-Pitch-Deck',
-      screenshots: [],
+      liveUrl: 'https://shokomori.github.io/Tekken-Pitch-Deck/',
+      previews: [
+        {
+          src: 'previews/tekken-pitch-deck.png',
+          label: 'Pampanga Powerhouse homepage',
+          alt: 'Pampanga Powerhouse Tekken 8 community website with its tournament photo and event links.',
+          kind: 'screenshot',
+        },
+      ],
     },
     {
       id: 'voxfilter',
@@ -145,7 +186,14 @@ export class App implements AfterViewInit, OnDestroy {
       description: 'A web application for cleaning background noise and isolating clearer voice audio for output and download.',
       language: 'C#',
       repositoryUrl: 'https://github.com/shokomori/VoxFilter',
-      screenshots: [],
+      previews: [
+        {
+          src: 'previews/voxfilter-audio-cleanup.svg',
+          label: 'Audio cleanup workflow illustration',
+          alt: 'Illustration of VoxFilter transforming a noisy voice recording into a clearer isolated voice track.',
+          kind: 'artwork',
+        },
+      ],
     },
     {
       id: 'gitsprint',
@@ -154,7 +202,14 @@ export class App implements AfterViewInit, OnDestroy {
       description: 'An automated GitHub commit tool for generating and scheduling repository changes as part of workflow-testing and automation experiments.',
       language: 'JavaScript',
       repositoryUrl: 'https://github.com/shokomori/GitSprint',
-      screenshots: [],
+      previews: [
+        {
+          src: 'previews/gitsprint-dashboard.png',
+          label: 'Live run dashboard',
+          alt: 'GitSprint dashboard waiting to start a run, with commit counters, speed controls, and an activity feed.',
+          kind: 'screenshot',
+        },
+      ],
     },
     {
       id: 'tcg-proxy-template',
@@ -163,7 +218,15 @@ export class App implements AfterViewInit, OnDestroy {
       description: 'A drag-and-drop web app that converts card images into print-ready proxy sheets for streamlined tabletop preparation.',
       language: 'HTML',
       repositoryUrl: 'https://github.com/shokomori/TCG-Proxy-Template',
-      screenshots: [],
+      liveUrl: 'https://tcg-proxy-template.vercel.app/',
+      previews: [
+        {
+          src: 'previews/tcg-proxy-template.png',
+          label: 'Print sheet workspace',
+          alt: 'Shoko Proxy Maker workspace with a nine-card print sheet, card-size settings, and PDF export controls.',
+          kind: 'screenshot',
+        },
+      ],
     },
     {
       id: 'chainpulse',
@@ -172,7 +235,15 @@ export class App implements AfterViewInit, OnDestroy {
       description: 'A decentralized news platform for blockchain-based verification and decentralized identity.',
       language: 'HTML',
       repositoryUrl: 'https://github.com/shokomori/ChainPulse',
-      screenshots: [],
+      liveUrl: 'https://shokomori.github.io/ChainPulse/',
+      previews: [
+        {
+          src: 'previews/chainpulse.png',
+          label: 'News verification homepage',
+          alt: 'ChainPulse homepage introducing blockchain-verified news with feed, verification, and journalist navigation.',
+          kind: 'screenshot',
+        },
+      ],
     },
     {
       id: 'bataan-campus-finder',
@@ -182,7 +253,14 @@ export class App implements AfterViewInit, OnDestroy {
       language: 'HTML',
       repositoryUrl: 'https://github.com/shokomori/Bataan-Campus-Finder',
       liveUrl: 'https://shokomori.github.io/Bataan-Campus-Finder/',
-      screenshots: [],
+      previews: [
+        {
+          src: 'previews/bataan-campus-finder.png',
+          label: 'Campus finder homepage',
+          alt: 'Bataan Campus Finder homepage with its campus search introduction and summary cards.',
+          kind: 'screenshot',
+        },
+      ],
     },
     {
       id: 'helpify-ai',
@@ -191,7 +269,14 @@ export class App implements AfterViewInit, OnDestroy {
       description: 'An intelligent customer support AI using Text-CNN for intent classification and reinforcement learning for adaptive, real-world assistance.',
       language: 'Python',
       repositoryUrl: 'https://github.com/shokomori/Helpify-AI',
-      screenshots: [],
+      previews: [
+        {
+          src: 'previews/helpify-ai-dashboard.png',
+          label: 'Customer support dashboard',
+          alt: 'Helpify AI customer support dashboard showing intent classes, the chat workspace, and model analytics.',
+          kind: 'screenshot',
+        },
+      ],
     },
     {
       id: 'virtuo-hero',
@@ -200,7 +285,15 @@ export class App implements AfterViewInit, OnDestroy {
       description: 'VirtuoHero is a mobile platform that uses AI to help Filipino freelancers and students grow skills, track progress, and build career readiness.',
       language: 'Dart',
       repositoryUrl: 'https://github.com/shokomori/Virtuo-Hero',
-      screenshots: [],
+      previews: [
+        {
+          src: 'previews/virtuohero-mascot.png',
+          label: 'VirtuoHero mascot artwork',
+          alt: 'The original VirtuoHero mascot artwork from the mobile app repository.',
+          kind: 'artwork',
+          fit: 'contain',
+        },
+      ],
     },
     {
       id: 'jeepboxhero',
@@ -209,7 +302,14 @@ export class App implements AfterViewInit, OnDestroy {
       description: 'A Filipino-inspired interactive software concept blending cultural themes with creative systems and experience design.',
       language: 'Dart',
       repositoryUrl: 'https://github.com/shokomori/JeepBoxHero',
-      screenshots: [],
+      previews: [
+        {
+          src: 'previews/jeepboxhero-record-shop.jpg',
+          label: 'Record shop game artwork',
+          alt: 'JeepBoxHero record-shop artwork from the game assets.',
+          kind: 'artwork',
+        },
+      ],
     },
     {
       id: 'vivy-fraud-detection',
@@ -218,7 +318,22 @@ export class App implements AfterViewInit, OnDestroy {
       description: 'A fraud-detection project for identifying suspicious GCash electronic payment receipts using image-processing pattern analysis.',
       language: 'Python',
       repositoryUrl: 'https://github.com/shokomori/vivy-fraud-detection',
-      screenshots: [],
+      previews: [
+        {
+          src: 'previews/vivy-home-screen.png',
+          label: 'Vivy app home screen',
+          alt: 'Vivy mobile app home screen with receipt verification, scan summary, and fraud prevention tips.',
+          kind: 'screenshot',
+          fit: 'contain',
+        },
+        {
+          src: 'previews/vivy-upload-screen.png',
+          label: 'Receipt upload screen',
+          alt: 'Vivy mobile app receipt upload screen with image selection and guidance for a clear scan.',
+          kind: 'screenshot',
+          fit: 'contain',
+        },
+      ],
     },
     {
       id: 'apocrypha',
@@ -227,7 +342,15 @@ export class App implements AfterViewInit, OnDestroy {
       description: "A music discovery website for tracking what you've listened to, saving songs to explore, and sharing recommendations with friends.",
       language: 'CSS',
       repositoryUrl: 'https://github.com/shokomori/apocrypha',
-      screenshots: [],
+      liveUrl: 'https://shokomori.github.io/apocrypha/',
+      previews: [
+        {
+          src: 'previews/apocrypha.png',
+          label: 'Music discovery landing page',
+          alt: 'Apocrypha music discovery landing page with its illustrated background and listening diary introduction.',
+          kind: 'screenshot',
+        },
+      ],
     },
     {
       id: 'angular-portfolio',
@@ -236,7 +359,15 @@ export class App implements AfterViewInit, OnDestroy {
       description: 'A portfolio for sharing technical work and creative interests, brought together with a reactive interface and a considered visual system.',
       language: 'TypeScript',
       repositoryUrl: 'https://github.com/shokomori/Masato-Martin-Portfolio',
-      screenshots: [],
+      liveUrl: 'https://shokomori.github.io/Masato-Martin-Portfolio/',
+      previews: [
+        {
+          src: 'previews/angular-portfolio.png',
+          label: 'Portfolio workspace',
+          alt: 'Masato Martin portfolio workspace with the project wheel, terminal details, and live project preview.',
+          kind: 'screenshot',
+        },
+      ],
     },
   ];
 
@@ -245,7 +376,7 @@ export class App implements AfterViewInit, OnDestroy {
   protected readonly mobileProjectMenuOpen = signal(false);
   protected readonly wheelDebug = signal(false);
   protected readonly wheelLayoutReady = signal(false);
-  protected readonly screenshotIndex = signal(0);
+  protected readonly previewIndex = signal(0);
   protected readonly lightboxOpen = signal(false);
   protected readonly cvOpen = signal(false);
   protected readonly cvSlide = signal<CvSlide>('resume');
@@ -378,6 +509,14 @@ export class App implements AfterViewInit, OnDestroy {
   private wheelUnlockTimer: number | null = null;
   private wheelDeltaResetTimer: number | null = null;
   private wheelClickSuppressionTimer: number | null = null;
+  private introTimer: number | null = null;
+  private introStarted = false;
+  private readonly introCommand = ':e ~/Projects/lorekeeper';
+  protected readonly introMessages = [
+    'session ........ ready',
+    `projects ....... ${this.projectData.length} indexed`,
+    'input .......... armed',
+  ];
   private terminalDraft = '';
   private dragPointerId: number | null = null;
   private dragLastY = 0;
@@ -388,6 +527,7 @@ export class App implements AfterViewInit, OnDestroy {
 
   constructor() {
     this.applyTheme(this.resolveStoredTheme());
+    this.startIntro();
     this.selectProject(0);
   }
 
@@ -445,6 +585,9 @@ export class App implements AfterViewInit, OnDestroy {
     }
     if (this.wheelClickSuppressionTimer !== null) {
       window.clearTimeout(this.wheelClickSuppressionTimer);
+    }
+    if (this.introTimer !== null) {
+      window.clearTimeout(this.introTimer);
     }
   }
 
@@ -539,6 +682,9 @@ export class App implements AfterViewInit, OnDestroy {
   }
 
   protected onWindowKeydown(event: KeyboardEvent): void {
+    if (this.introActive()) {
+      return;
+    }
     this.onInputKeyDown(event);
     if (this.mobileProjectMenuOpen() && event.key === 'Escape') {
       event.preventDefault();
@@ -586,12 +732,12 @@ export class App implements AfterViewInit, OnDestroy {
       } else if (event.key === 'Escape') {
         event.preventDefault();
         this.closeLightbox();
-      } else if (event.key === 'ArrowLeft' && this.getActiveProjectScreenshots().length > 1) {
+      } else if (event.key === 'ArrowLeft' && this.getActiveProjectPreviews().length > 1) {
         event.preventDefault();
-        this.previousScreenshot();
-      } else if (event.key === 'ArrowRight' && this.getActiveProjectScreenshots().length > 1) {
+        this.previousPreview();
+      } else if (event.key === 'ArrowRight' && this.getActiveProjectPreviews().length > 1) {
         event.preventDefault();
-        this.nextScreenshot();
+        this.nextPreview();
       }
       return;
     }
@@ -630,40 +776,48 @@ export class App implements AfterViewInit, OnDestroy {
     } else if (inProjectPane && key === 'escape') {
       event.preventDefault();
       this.focusSelectedProject();
-    } else if (isWorkspaceContext && key === 'arrowleft' && this.getActiveProjectScreenshots().length > 1) {
+    } else if (isWorkspaceContext && key === 'arrowleft' && this.getActiveProjectPreviews().length > 1) {
       event.preventDefault();
-      this.previousScreenshot();
-    } else if (isWorkspaceContext && key === 'arrowright' && this.getActiveProjectScreenshots().length > 1) {
+      this.previousPreview();
+    } else if (isWorkspaceContext && key === 'arrowright' && this.getActiveProjectPreviews().length > 1) {
       event.preventDefault();
-      this.nextScreenshot();
+      this.nextPreview();
     }
 
   }
 
   protected getProjectBufferLines(project = this.selectedProject()): ProjectInfoLine[] {
     return [
-      { label: 'project', value: project.title },
-      { label: 'path', value: project.path },
-      { label: 'language', value: project.language },
-      { label: 'summary', value: project.description },
-      ...(project.repositoryUrl ? [{ label: 'repo', value: project.repositoryUrl, href: project.repositoryUrl }] : []),
+      { label: 'lang', value: project.language },
+      ...(project.repositoryUrl ? [{ label: 'source', value: project.repositoryUrl, href: project.repositoryUrl }] : []),
       ...(project.liveUrl ? [{ label: 'live', value: project.liveUrl, href: project.liveUrl }] : []),
-      { label: 'preview', value: project.screenshots.length ? `${project.screenshots.length} available` : 'unavailable' },
+      {
+        label: 'preview',
+        value: project.previews.length
+          ? `${project.previews.length} preview${project.previews.length === 1 ? '' : 's'}`
+          : project.liveUrl
+            ? 'link only'
+            : 'unavailable',
+      },
     ];
   }
 
-  protected getActiveProjectScreenshots(): string[] {
-    return this.selectedProject().screenshots;
+  protected getActiveProjectPreviews(): ProjectPreview[] {
+    return this.selectedProject().previews;
   }
 
-  protected getActiveProjectScreenshot(): string | null {
-    const screenshots = this.getActiveProjectScreenshots();
-    return screenshots[this.screenshotIndex()] ?? screenshots[0] ?? null;
+  protected getActiveProjectPreview(): ProjectPreview | null {
+    const previews = this.getActiveProjectPreviews();
+    return previews[this.previewIndex()] ?? previews[0] ?? null;
   }
 
-  protected getScreenshotIndicator(): string {
-    const screenshotCount = this.getActiveProjectScreenshots().length;
-    return screenshotCount ? `${this.screenshotIndex() + 1} / ${screenshotCount}` : 'no screenshots';
+  protected getPreviewIndicator(): string {
+    const preview = this.getActiveProjectPreview();
+    const previewCount = this.getActiveProjectPreviews().length;
+    if (!previewCount || !preview) {
+      return 'no preview';
+    }
+    return `${this.previewIndex() + 1}/${previewCount} · ${preview.kind === 'artwork' ? 'artwork' : 'shot'}`;
   }
 
   protected getRelativeProjectOffset(index: number): number {
@@ -804,7 +958,7 @@ export class App implements AfterViewInit, OnDestroy {
     this.selectedProjectIndex.set(nextIndex);
     this.selectedProject.set(project);
     this.mobileProjectMenuOpen.set(false);
-    this.screenshotIndex.set(0);
+    this.previewIndex.set(0);
     this.lightboxOpen.set(false);
     this.workspacePath.set(project.path);
     this.revealSelectedProject();
@@ -955,24 +1109,30 @@ export class App implements AfterViewInit, OnDestroy {
     this.dragMoved = false;
   }
 
-  protected previousScreenshot(): void {
-    const count = this.getActiveProjectScreenshots().length;
+  protected previousPreview(): void {
+    const count = this.getActiveProjectPreviews().length;
     if (!count) {
       return;
     }
-    this.screenshotIndex.set((this.screenshotIndex() + count - 1) % count);
+    this.previewIndex.set((this.previewIndex() + count - 1) % count);
   }
 
-  protected nextScreenshot(): void {
-    const count = this.getActiveProjectScreenshots().length;
+  protected nextPreview(): void {
+    const count = this.getActiveProjectPreviews().length;
     if (!count) {
       return;
     }
-    this.screenshotIndex.set((this.screenshotIndex() + 1) % count);
+    this.previewIndex.set((this.previewIndex() + 1) % count);
+  }
+
+  protected selectPreview(index: number): void {
+    if (index >= 0 && index < this.getActiveProjectPreviews().length) {
+      this.previewIndex.set(index);
+    }
   }
 
   protected openLightbox(event: Event): void {
-    if (!this.getActiveProjectScreenshots().length) {
+    if (!this.getActiveProjectPreviews().length) {
       return;
     }
     this.lightboxReturnFocus = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
@@ -986,6 +1146,37 @@ export class App implements AfterViewInit, OnDestroy {
     this.lightboxOpen.set(false);
     window.requestAnimationFrame(() => this.lightboxReturnFocus?.focus());
     this.lightboxReturnFocus = null;
+  }
+
+  protected onPreviewPointerMove(event: PointerEvent): void {
+    const frame = event.currentTarget;
+    if (!(frame instanceof HTMLElement) || event.pointerType === 'touch') {
+      return;
+    }
+
+    const bounds = frame.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) {
+      return;
+    }
+
+    const x = Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100));
+    const y = Math.max(0, Math.min(100, ((event.clientY - bounds.top) / bounds.height) * 100));
+    frame.style.setProperty('--preview-x', `${x}%`);
+    frame.style.setProperty('--preview-y', `${y}%`);
+    frame.style.setProperty('--preview-tilt-x', `${((50 - y) / 50) * 2}deg`);
+    frame.style.setProperty('--preview-tilt-y', `${((x - 50) / 50) * 2.5}deg`);
+  }
+
+  protected onPreviewPointerLeave(event: PointerEvent): void {
+    const frame = event.currentTarget;
+    if (!(frame instanceof HTMLElement)) {
+      return;
+    }
+
+    frame.style.removeProperty('--preview-x');
+    frame.style.removeProperty('--preview-y');
+    frame.style.removeProperty('--preview-tilt-x');
+    frame.style.removeProperty('--preview-tilt-y');
   }
 
   protected openCv(event: Event): void {
@@ -1009,6 +1200,21 @@ export class App implements AfterViewInit, OnDestroy {
 
   protected getCertificateAsset(file: string): string {
     return `certificates/${encodeURIComponent(file)}`;
+  }
+
+  protected getIntroCommandEditor(): string {
+    return this.introCommand.slice(0, Math.min(this.introTypedLength(), 2));
+  }
+
+  protected getIntroCommandPath(): string {
+    return this.introCommand.slice(2, this.introTypedLength());
+  }
+
+  protected skipIntro(): void {
+    if (!this.introActive()) {
+      return;
+    }
+    this.completeIntro();
   }
 
   private moveCvSlide(direction: 1 | -1): void {
@@ -1096,10 +1302,7 @@ export class App implements AfterViewInit, OnDestroy {
       this.typeTerminalEntries([
         ...commandEntries,
         ...results,
-        ...this.getProjectBufferLines().map((line) => ({
-          kind: 'output' as const,
-          text: `${line.label}: ${line.value}`,
-        })),
+        ...this.getProjectTerminalEntries(this.selectedProject()).slice(2),
       ], true);
     } else {
       this.appendTerminalEntries(commandEntries);
@@ -1366,6 +1569,78 @@ export class App implements AfterViewInit, OnDestroy {
     );
   }
 
+  private startIntro(): void {
+    if (this.introStarted || this.prefersReducedMotion()) {
+      return;
+    }
+    const replayRequested = new URLSearchParams(window.location.search).get('intro') === '1';
+    if (!replayRequested && window.sessionStorage.getItem('masato-portfolio-intro-seen') === '1') {
+      return;
+    }
+
+    this.introStarted = true;
+    this.introActive.set(true);
+    this.introStage.set('monogram');
+    window.sessionStorage.setItem('masato-portfolio-intro-seen', '1');
+    this.scheduleIntroStep(() => {
+      this.introStage.set('boot');
+      this.introLogLines.set(1);
+      this.revealIntroLogLine();
+    }, 280);
+  }
+
+  private revealIntroLogLine(): void {
+    if (this.introLogLines() < this.introMessages.length) {
+      this.scheduleIntroStep(() => {
+        this.introLogLines.update((count) => count + 1);
+        this.revealIntroLogLine();
+      }, 110);
+      return;
+    }
+
+    this.scheduleIntroStep(() => {
+      this.introStage.set('editor');
+      this.scheduleIntroStep(() => {
+        this.introStage.set('typing');
+        this.typeIntroCharacter();
+      }, 220);
+    }, 110);
+  }
+
+  private typeIntroCharacter(): void {
+    if (this.introTypedLength() >= this.introCommand.length) {
+      this.introStage.set('handoff');
+      this.scheduleIntroStep(() => this.completeIntro(), 260);
+      return;
+    }
+
+    this.introTypedLength.update((length) => length + 1);
+    this.scheduleIntroStep(() => this.typeIntroCharacter(), 24);
+  }
+
+  private scheduleIntroStep(callback: () => void, delay: number): void {
+    if (this.introTimer !== null) {
+      window.clearTimeout(this.introTimer);
+    }
+    this.introTimer = window.setTimeout(() => {
+      this.introTimer = null;
+      callback();
+    }, delay);
+  }
+
+  private completeIntro(): void {
+    if (!this.introActive()) {
+      return;
+    }
+    if (this.introTimer !== null) {
+      window.clearTimeout(this.introTimer);
+      this.introTimer = null;
+    }
+    this.introStage.set('complete');
+    this.introActive.set(false);
+    this.typeTerminalEntries(this.getProjectTerminalEntries(this.selectedProject()), true);
+  }
+
   private isEditableTarget(target: EventTarget | null): boolean {
     return (
       target instanceof HTMLElement &&
@@ -1388,6 +1663,10 @@ export class App implements AfterViewInit, OnDestroy {
 
     if (replace) {
       this.terminalEntries.set([]);
+    }
+
+    if (this.introActive()) {
+      return;
     }
 
     if (
@@ -1428,7 +1707,11 @@ export class App implements AfterViewInit, OnDestroy {
       }
       this.terminalEntries.update((current) => [
         ...current,
-        { kind: this.terminalTypingCurrent!.kind, text: '' },
+        {
+          kind: this.terminalTypingCurrent!.kind,
+          text: '',
+          href: this.terminalTypingCurrent!.href,
+        },
       ].slice(-100));
     }
 
@@ -1636,10 +1919,13 @@ export class App implements AfterViewInit, OnDestroy {
   private getProjectTerminalEntries(project = this.selectedProject()): TerminalEntry[] {
     return [
       { kind: 'system', text: `masato@portfolio ${project.path}` },
-      { kind: 'command', text: `› :e ${project.path}` },
+      { kind: 'command', text: `› fetch ${project.id}` },
+      { kind: 'output', text: project.title },
+      { kind: 'output', text: project.description },
       ...this.getProjectBufferLines(project).map((line) => ({
         kind: 'output' as const,
         text: `${line.label}: ${line.value}`,
+        href: line.href,
       })),
     ];
   }

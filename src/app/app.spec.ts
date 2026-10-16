@@ -74,16 +74,145 @@ describe('App workspace interactions', () => {
     return input;
   }
 
-  it('renders the data-driven project wheel and an honest unavailable-preview state', () => {
+  it('hands off from the one-time terminal intro and never replays on project or theme changes', async () => {
+    window.sessionStorage.removeItem('masato-portfolio-intro-seen');
+    window.history.replaceState(null, '', window.location.pathname);
     const { fixture, element } = createWorkspace();
+
+    expect(element.querySelector('.portfolio-intro')?.getAttribute('data-stage')).toBe('monogram');
+    expect(element.querySelector('main.stage')?.hasAttribute('inert')).toBe(true);
+
+    element.querySelector<HTMLButtonElement>('.intro-skip')?.click();
+    fixture.detectChanges();
+    expect(element.querySelector('.portfolio-intro')).toBeNull();
+    expect(element.querySelector('main.stage')?.hasAttribute('inert')).toBe(false);
+
+    element.querySelector<HTMLButtonElement>('.wheel-item[aria-label="VoxFilter"]')?.click();
+    element.querySelector<HTMLButtonElement>('.den')?.click();
+    fixture.detectChanges();
+    expect(selectedProject(element)).toBe('VoxFilter');
+    expect(element.querySelector('.portfolio-intro')).toBeNull();
+
+    fixture.destroy();
+  });
+
+  it('completes the intro automatically and starts the existing project terminal typing', async () => {
+    window.sessionStorage.removeItem('masato-portfolio-intro-seen');
+    window.history.replaceState(null, '', window.location.pathname);
+    const { fixture, element } = createWorkspace();
+
+    await waitForTerminalText(fixture, 'preview: 3 previews', 8000);
+    fixture.detectChanges();
+    expect(element.querySelector('.portfolio-intro')).toBeNull();
+    expect(element.querySelector('main.stage')?.hasAttribute('inert')).toBe(false);
+    expect(normalizedText(element.querySelector('.terminal-output'))).toContain('Lorekeeper');
+    fixture.destroy();
+  }, 12000);
+
+  it('renders the data-driven workspace with real Lorekeeper screenshots', async () => {
+    const { fixture, element } = createWorkspace();
+    await waitForTerminalText(fixture, 'preview: 3 previews');
+    fixture.detectChanges();
 
     expect(element.querySelectorAll('.wheel-item').length).toBe(13);
     expect(selectedProject(element)).toBe('Lorekeeper');
-    expect(normalizedText(element.querySelector('.buffer'))).toContain('preview: unavailable');
+    expect(normalizedText(element.querySelector('.winbar'))).toBe('fish — ~/Projects/lorekeeper');
+    expect(normalizedText(element.querySelector('.terminal-output'))).toContain('Lorekeeper');
+    expect(normalizedText(element.querySelector('.buffer'))).toContain('preview: 3 previews');
     expect(element.querySelector('.buffer a')?.getAttribute('href')).toBe('https://github.com/shokomori/Lorekeeper');
     expect(element.querySelectorAll('.buffer a').length).toBe(2);
-    expect(element.querySelectorAll('img').length).toBe(0);
+    expect(element.querySelector('.wheel-item[aria-label="Lorekeeper"] img')?.getAttribute('src')).toBe(
+      'previews/lorekeeper-landing-cover.jpg',
+    );
+    expect(element.querySelectorAll('.shot .frame img').length).toBe(3);
+    expect(element.querySelector('.shot .frame img.is-current')?.getAttribute('alt')).toContain(
+      'Lorekeeper campaign landing page',
+    );
+    expect(element.querySelectorAll('.shot-index').length).toBe(3);
 
+    fixture.destroy();
+  }, 15000);
+
+  it('crossfades between genuine screenshots and opens the selected image in the large viewer', async () => {
+    const { fixture, element } = createWorkspace();
+    await waitForTerminalText(fixture, 'preview: 3 previews');
+    fixture.detectChanges();
+
+    element.querySelector<HTMLButtonElement>('.shot-index[aria-label^="Campaign dashboard"]')?.click();
+    fixture.detectChanges();
+    expect(element.querySelector('.shot .frame img.is-current')?.getAttribute('src')).toBe(
+      'previews/lorekeeper-dashboard-empty.jpg',
+    );
+    expect(element.querySelector('.shot figcaption')?.textContent).toContain('Campaign dashboard');
+
+    element.querySelector<HTMLButtonElement>('.shot .frame')?.click();
+    fixture.detectChanges();
+    expect(element.querySelector('.lightbox img')?.getAttribute('src')).toBe(
+      'previews/lorekeeper-dashboard-empty.jpg',
+    );
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    expect(element.querySelector('.lightbox img')?.getAttribute('src')).toBe('previews/lorekeeper-sessions.jpg');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    expect(element.querySelector('.lightbox')).toBeNull();
+    fixture.destroy();
+  }, 15000);
+
+  it('shows the published Bataan Campus Finder screenshot and its live project link', async () => {
+    const { fixture, element } = createWorkspace();
+    element.querySelector<HTMLButtonElement>('.wheel-item[aria-label="Bataan Campus Finder"]')?.click();
+    fixture.detectChanges();
+    await waitForTerminalText(fixture, 'preview: 1 preview');
+    fixture.detectChanges();
+
+    expect(selectedProject(element)).toBe('Bataan Campus Finder');
+    expect(element.querySelector('.buffer a[href="https://shokomori.github.io/Bataan-Campus-Finder/"]')?.getAttribute('href')).toBe(
+      'https://shokomori.github.io/Bataan-Campus-Finder/',
+    );
+    expect(element.querySelector('.shot .frame img.is-current')?.getAttribute('src')).toBe(
+      'previews/bataan-campus-finder.png',
+    );
+    fixture.destroy();
+  }, 15000);
+
+  it('provides a visual preview for every listed project', async () => {
+    const { fixture, element } = createWorkspace();
+    await waitForTerminalText(fixture, 'preview: 3 previews');
+
+    const projects = Array.from(element.querySelectorAll<HTMLButtonElement>('.wheel-item'));
+    expect(projects).toHaveLength(13);
+
+    for (const project of projects) {
+      project.click();
+      fixture.detectChanges();
+      const preview = element.querySelector<HTMLImageElement>('.shot .frame img.is-current');
+      expect(preview?.getAttribute('src'), project.getAttribute('aria-label') ?? 'project preview').toMatch(
+        /^previews\//,
+      );
+      expect(preview?.getAttribute('alt')).toBeTruthy();
+    }
+
+    fixture.destroy();
+  }, 20000);
+
+  it('tracks pointer position over a preview and clears the effect on leave', () => {
+    const { fixture, element } = createWorkspace();
+    const frame = element.querySelector<HTMLButtonElement>('.shot .frame');
+    if (!frame) {
+      throw new Error('Project preview frame was not rendered.');
+    }
+    frame.getBoundingClientRect = () => new DOMRect(10, 20, 200, 100);
+
+    frame.dispatchEvent(new MouseEvent('pointermove', { clientX: 160, clientY: 45 }));
+    expect(frame.style.getPropertyValue('--preview-x')).toBe('75%');
+    expect(frame.style.getPropertyValue('--preview-y')).toBe('25%');
+
+    frame.dispatchEvent(new Event('pointerleave'));
+    expect(frame.style.getPropertyValue('--preview-x')).toBe('');
+    expect(frame.style.getPropertyValue('--preview-tilt-y')).toBe('');
     fixture.destroy();
   });
 
@@ -195,16 +324,16 @@ describe('App workspace interactions', () => {
 
     project?.click();
     fixture.detectChanges();
-    await waitForTerminalText(fixture, 'repo: https://github.com/shokomori/VoxFilter');
+    await waitForTerminalText(fixture, 'source: https://github.com/shokomori/VoxFilter');
     fixture.detectChanges();
 
     expect(selectedProject(element)).toBe('VoxFilter');
-    expect(element.querySelector('.winbar')).toBeNull();
+    expect(normalizedText(element.querySelector('.winbar'))).toBe('fish — ~/Projects/voxfilter');
     expect(element.querySelector('.buffer')?.textContent).toContain('~/Projects/voxfilter');
     expect(element.querySelector('.buffer')?.textContent).toContain('background noise');
     expect(element.querySelector('.bar-state .col:nth-child(2) .value')?.textContent).toContain('VoxFilter');
-    expect(normalizedText(element.querySelector('.terminal-output'))).toContain('project: VoxFilter');
-    expect(normalizedText(element.querySelector('.terminal-output'))).toContain('repo: https://github.com/shokomori/VoxFilter');
+    expect(normalizedText(element.querySelector('.terminal-output'))).toContain('lang: C#');
+    expect(normalizedText(element.querySelector('.terminal-output'))).toContain('source: https://github.com/shokomori/VoxFilter');
 
     fixture.destroy();
   }, 15000);
@@ -247,11 +376,13 @@ describe('App workspace interactions', () => {
     fixture.destroy();
   });
 
-  it('includes Apocrypha as a verified music discovery project', () => {
+  it('includes Apocrypha as a verified music discovery project', async () => {
     const { fixture, element } = createWorkspace();
     const project = element.querySelector<HTMLButtonElement>('.wheel-item[aria-label="Apocrypha"]');
 
     project?.click();
+    fixture.detectChanges();
+    await waitForTerminalText(fixture, 'https://github.com/shokomori/apocrypha');
     fixture.detectChanges();
 
     expect(selectedProject(element)).toBe('Apocrypha');
@@ -259,9 +390,9 @@ describe('App workspace interactions', () => {
     expect(element.querySelector('.buffer')?.textContent).toContain('https://github.com/shokomori/apocrypha');
 
     fixture.destroy();
-  });
+  }, 15000);
 
-  it('wraps keyboard navigation in both directions without losing selection synchronization', () => {
+  it('wraps keyboard navigation in both directions without losing selection synchronization', async () => {
     const { fixture, element } = createWorkspace();
     const wheel = element.querySelector<HTMLElement>('.wheel');
     if (!wheel) {
@@ -270,8 +401,9 @@ describe('App workspace interactions', () => {
 
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
     fixture.detectChanges();
+    await waitForTerminalText(fixture, 'Angular Portfolio');
     expect(selectedProject(element)).toBe('Angular Portfolio');
-    expect(normalizedText(element.querySelector('.buffer'))).toContain('project: Angular Portfolio');
+    expect(normalizedText(element.querySelector('.buffer'))).toContain('Angular Portfolio');
 
     wheel.focus();
     wheel.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true, cancelable: true }));
@@ -415,11 +547,12 @@ describe('App workspace interactions', () => {
 
     runCommand(element, ':e ~/Projects/voxfilter');
     fixture.detectChanges();
-    await waitForTerminalText(fixture, 'project: VoxFilter');
+    await waitForTerminalText(fixture, 'source: https://github.com/shokomori/VoxFilter');
     fixture.detectChanges();
     expect(selectedProject(element)).toBe('VoxFilter');
     expect(element.querySelector('.buffer')?.textContent).toContain('~/Projects/voxfilter');
-    expect(element.querySelector('.terminal-output')?.textContent).toContain('project: VoxFilter');
+    expect(element.querySelector('.terminal-output')?.textContent).toContain('VoxFilter');
+    expect(element.querySelector('.terminal-output')?.textContent).toContain('source: https://github.com/shokomori/VoxFilter');
     expect(element.querySelector('.terminal-output')?.textContent).toContain('› :e ~/Projects/voxfilter');
 
     runCommand(element, ':theme blue');

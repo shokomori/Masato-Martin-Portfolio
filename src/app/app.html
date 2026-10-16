@@ -1,4 +1,45 @@
-﻿<main class="stage">
+﻿@if (introActive()) {
+  <section class="portfolio-intro" [attr.data-stage]="introStage()" aria-label="Portfolio introduction">
+    <div class="intro-frame">
+      <button class="intro-skip" type="button" (click)="skipIntro()">skip intro <span>↵</span></button>
+
+      <div class="intro-content">
+        <svg class="intro-mark" viewBox="0 0 88 80" aria-label="MM" role="img">
+          <path d="M0 12L12 0H16V32H29L38 23V43L33 48H16V80H0Z"></path>
+          <path d="M50 0H88V16H57L50 23V57L57 64H88L72 80H50L34 64V16Z"></path>
+        </svg>
+
+        @if (introStage() === 'boot' || introStage() === 'editor' || introStage() === 'typing' || introStage() === 'handoff') {
+          <div class="intro-log" aria-live="polite">
+            @for (message of introMessages; track message; let index = $index) {
+              @if (introLogLines() > index) { <p>{{ message }}</p> }
+            }
+          </div>
+        }
+
+        @if (introStage() === 'editor' || introStage() === 'typing' || introStage() === 'handoff') {
+          <div class="intro-editor" aria-label="Portfolio terminal">
+            <div class="intro-editor-bar">
+              <span>masato@portfolio</span>
+              <span>~/Projects</span>
+              <span>INSERT</span>
+            </div>
+            <p class="intro-command" aria-live="off">
+              <span class="intro-prompt">masato@portfolio ~ $</span>
+              <span class="intro-command-editor">{{ getIntroCommandEditor() }}</span>
+              <span class="intro-command-path">{{ getIntroCommandPath() }}</span>
+              <span class="intro-cursor" aria-hidden="true"></span>
+            </p>
+          </div>
+        }
+      </div>
+
+      <p class="intro-caption">// engineering with feeling</p>
+    </div>
+  </section>
+}
+
+<main class="stage" [attr.inert]="introActive() ? '' : null">
   <div class="interaction-layer" #interactionLayer aria-hidden="true"></div>
   <canvas #trackingLine class="tracking-line" aria-hidden="true"></canvas>
   <header class="frame-top">
@@ -70,8 +111,8 @@
             (click)="onWheelItemClick($event, index)"
             [attr.aria-selected]="selectedProjectIndex() === index"
           >
-            @if (project.screenshots[0]; as screenshot) {
-              <img [src]="screenshot" [alt]="project.title + ' preview'" draggable="false" />
+            @if (project.previews[0]; as preview) {
+              <img [src]="preview.src" alt="" draggable="false" />
             } @else {
               <span class="wheel-preview" aria-hidden="true">
                 <span>{{ project.language }}</span>
@@ -89,65 +130,101 @@
     </nav>
 
     <div class="pane" aria-live="polite">
-      <div class="buffer" #projectPane tabindex="0" aria-label="Project details" (focus)="focusProjectPane()">
-        @for (line of getProjectBufferLines(); track $index; let index = $index) {
-          <div class="ln" [class.is-tilde]="index === 0">
-            <span class="no">{{ index + 1 }}</span>
-            <span class="tx"><span class="field-label">{{ line.label }}:</span>&nbsp;@if (line.href) {<a [href]="line.href" target="_blank" rel="noopener noreferrer">{{ line.value }}</a>} @else {<span>{{ line.value }}</span>}</span>
-          </div>
-        }
+      <div class="winbar">fish — {{ workspacePath() }}</div>
 
-        @if (getActiveProjectScreenshot(); as screenshot) {
+      <div class="buffer" #projectPane tabindex="0" aria-label="Project details" (focus)="focusProjectPane()">
+        <section class="terminal-shell" aria-label="Workspace terminal">
+          <div class="terminal-pane">
+            <div class="terminal-bar">
+              <span class="terminal-led"></span>
+              <span>workspace — {{ workspacePath() }} · MASATO-MARTIN</span>
+            </div>
+
+            <div class="terminal-output" #terminalOutput [attr.aria-live]="terminalTyping() ? 'off' : 'polite'">
+              @for (entry of terminalEntries(); track $index) {
+                <div class="terminal-line" [class]="'kind-' + entry.kind" [class.is-typing]="terminalTyping()">
+                  @if (entry.href) {
+                    <a [href]="entry.href" target="_blank" rel="noopener noreferrer">{{ entry.text }}</a>
+                  } @else {
+                    {{ entry.text }}
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        </section>
+
+        @if (getActiveProjectPreview(); as preview) {
           <div class="shot">
             <figure>
               <figcaption>
                 <span>{{ selectedProject().title }}</span>
-                <span>{{ getScreenshotIndicator() }}</span>
+                <span>{{ preview.label }} · {{ getPreviewIndicator() }}</span>
               </figcaption>
-              <button type="button" class="frame" (click)="openLightbox($event)">
-                <img [src]="screenshot" [alt]="selectedProject().title + ' preview'" />
-                <span class="frame-hint">open preview</span>
+              <button
+                type="button"
+                class="frame"
+                [attr.aria-label]="'View ' + selectedProject().title + ' preview: ' + preview.label"
+                (pointermove)="onPreviewPointerMove($event)"
+                (pointerleave)="onPreviewPointerLeave($event)"
+                (click)="openLightbox($event)"
+              >
+                @for (image of getActiveProjectPreviews(); track image.src; let index = $index) {
+                  <img
+                    [src]="image.src"
+                    [alt]="index === previewIndex() ? image.alt : ''"
+                    [class.is-current]="index === previewIndex()"
+                    [class.is-contained]="image.fit === 'contain'"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                }
+                <span class="frame-hint">view large</span>
               </button>
+              @if (getActiveProjectPreviews().length > 1) {
+                <div class="shot-controls" role="group" [attr.aria-label]="selectedProject().title + ' previews'">
+                  @for (image of getActiveProjectPreviews(); track image.src; let index = $index) {
+                    <button
+                      type="button"
+                      class="shot-index"
+                      [attr.aria-label]="image.label + ' — preview ' + (index + 1) + ' of ' + getActiveProjectPreviews().length"
+                      [attr.aria-pressed]="previewIndex() === index"
+                      (click)="selectPreview(index)"
+                    >{{ index + 1 }}</button>
+                  }
+                </div>
+              }
             </figure>
           </div>
+        } @else {
+          <p class="preview-unavailable">
+            // preview asset unavailable
+            @if (selectedProject().liveUrl; as liveUrl) {
+              · <a [href]="liveUrl" target="_blank" rel="noopener noreferrer">open live project</a>
+            }
+          </p>
         }
+
+        <label class="terminal-input-row" for="workspace-command">
+          <span class="prompt">masato@portfolio {{ workspacePath() }} ›</span>
+          <input
+            id="workspace-command"
+            #commandInput
+            type="text"
+            [value]="terminalInput()"
+            (input)="onTerminalInput($event)"
+            (keydown)="onTerminalKeydown($event)"
+            (focus)="focusTerminal()"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="Project terminal input"
+          />
+        </label>
       </div>
+
       <div class="eye-host" #eyeHost aria-hidden="true">
         <iframe #eyeFrame class="eye-frame" src="eye-demo.html" title="Animated text eye" tabindex="-1"></iframe>
       </div>
-
-      <section class="terminal-shell" aria-label="Workspace terminal">
-        <div class="terminal-pane">
-          <div class="terminal-bar">
-            <span class="terminal-led"></span>
-            <span>workspace — {{ workspacePath() }} · MASATO-MARTIN</span>
-          </div>
-
-          <div class="terminal-output" #terminalOutput [attr.aria-live]="terminalTyping() ? 'off' : 'polite'">
-            @for (entry of terminalEntries(); track $index) {
-              <div class="terminal-line" [class]="'kind-' + entry.kind" [class.is-typing]="terminalTyping()">
-                {{ entry.text }}
-              </div>
-            }
-          </div>
-
-          <label class="terminal-input-row" for="workspace-command">
-            <span class="prompt">masato@portfolio {{ workspacePath() }} ›</span>
-            <input
-              id="workspace-command"
-              #commandInput
-              type="text"
-              [value]="terminalInput()"
-              (input)="onTerminalInput($event)"
-              (keydown)="onTerminalKeydown($event)"
-              (focus)="focusTerminal()"
-              autocomplete="off"
-              spellcheck="false"
-              aria-label="Project terminal input"
-            />
-          </label>
-        </div>
-      </section>
     </div>
   </section>
 
@@ -251,13 +328,13 @@
     <div class="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightbox-title" tabindex="-1" (click)="$event.stopPropagation()">
       <button type="button" class="lightbox-close" aria-label="Close preview" (click)="closeLightbox()">×</button>
       <h2 id="lightbox-title">{{ selectedProject().title }} preview</h2>
-      @if (getActiveProjectScreenshot(); as screenshot) {
-        <img [src]="screenshot" [alt]="selectedProject().title + ' enlarged preview'" />
+      @if (getActiveProjectPreview(); as preview) {
+        <img [src]="preview.src" [alt]="preview.alt" />
       }
       <div class="lightbox-controls">
-        <button type="button" class="mini-button" (click)="previousScreenshot()" [disabled]="getActiveProjectScreenshots().length < 2">Prev</button>
-        <span>{{ screenshotIndex() + 1 }} / {{ getActiveProjectScreenshots().length }}</span>
-        <button type="button" class="mini-button" (click)="nextScreenshot()" [disabled]="getActiveProjectScreenshots().length < 2">Next</button>
+        <button type="button" class="mini-button" (click)="previousPreview()" [disabled]="getActiveProjectPreviews().length < 2">Prev</button>
+        <span>{{ previewIndex() + 1 }} / {{ getActiveProjectPreviews().length }}</span>
+        <button type="button" class="mini-button" (click)="nextPreview()" [disabled]="getActiveProjectPreviews().length < 2">Next</button>
       </div>
     </div>
   </div>

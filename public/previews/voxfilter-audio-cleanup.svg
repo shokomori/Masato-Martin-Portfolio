@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" fill="none">
+  <defs>
+    <linearGradient id="background" x1="80" y1="30" x2="1115" y2="675" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111c21"/>
+      <stop offset="1" stop-color="#090e13"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#65d9c1" stop-opacity=".35"/>
+      <stop offset=".48" stop-color="#91ead2"/>
+      <stop offset="1" stop-color="#58b6d8"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" stroke="#9ec5c0" stroke-opacity=".08"/>
+    </pattern>
+  </defs>
+  <path fill="url(#background)" d="M0 0h1200v675H0z"/>
+  <path fill="url(#grid)" d="M0 0h1200v675H0z"/>
+  <path stroke="#8fb8b1" stroke-opacity=".2" d="M66 86h1068M66 589h1068"/>
+  <circle cx="84" cy="50" r="5" fill="#74dbc5"/>
+  <text x="102" y="56" fill="#e2ece8" font-family="ui-monospace,monospace" font-size="18" letter-spacing="2">VOXFILTER</text>
+  <text x="1132" y="55" fill="#829b9c" font-family="ui-monospace,monospace" font-size="12" text-anchor="end" letter-spacing="1.5">AUDIO CLEANUP · PROJECT PREVIEW</text>
+  <text x="66" y="142" fill="#7ddac6" font-family="ui-monospace,monospace" font-size="12" letter-spacing="2">NOISE REDUCTION / VOICE ISOLATION</text>
+  <text x="66" y="184" fill="#eef4ef" font-family="Arial,sans-serif" font-size="30" font-weight="600">From noisy recording to clearer voice.</text>
+
+  <rect x="66" y="226" width="488" height="270" rx="4" fill="#121a1e" stroke="#8fb8b1" stroke-opacity=".22"/>
+  <text x="96" y="266" fill="#8aa4a4" font-family="ui-monospace,monospace" font-size="12" letter-spacing="1.8">SOURCE AUDIO</text>
+  <text x="96" y="307" fill="#e4ece7" font-family="Arial,sans-serif" font-size="18">Background noise + voice</text>
+  <path d="M96 377h18l8-23 12 57 13-78 12 107 12-87 12 56 13-30 12 12h16l10-42 12 59 12-78 12 92 12-60 13 35 12-18h16l10-47 13 79 12-95 12 110 13-72 12 39 13-16h20l10-32 12 52 13-67 12 83 12-53 13 30 13-17h16l10-34 12 60 13-75 12 93 12-61 13 39 12-21h15" stroke="#75b9ae" stroke-opacity=".8" stroke-width="2"/>
+  <path d="M96 427h360" stroke="#607878" stroke-opacity=".42"/>
+  <text x="96" y="464" fill="#637b7d" font-family="ui-monospace,monospace" font-size="11">input → high-pass / low-pass filtering</text>
+
+  <path d="M580 361h36m-12-12 12 12-12 12" stroke="#74dbc5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="599" cy="361" r="31" stroke="#74dbc5" stroke-opacity=".26"/>
+  <circle cx="599" cy="361" r="22" stroke="#74dbc5" stroke-opacity=".13"/>
+
+  <rect x="646" y="226" width="488" height="270" rx="4" fill="#121a1e" stroke="#74dbc5" stroke-opacity=".45"/>
+  <text x="676" y="266" fill="#7ddac6" font-family="ui-monospace,monospace" font-size="12" letter-spacing="1.8">PROCESSED VOICE</text>
+  <text x="676" y="307" fill="#e4ece7" font-family="Arial,sans-serif" font-size="18">Cleaner audio for output</text>
+  <path d="M676 377h18l8-8 12 17 13-25 12 36 12-29 12 17 13-9 12 4h16l10-14 12 21 12-28 12 34 12-23 13 14 12-7h16l10-16 13 27 12-32 12 37 13-25 12 15 13-8h20l10-13 12 19 13-25 12 31 12-21 13 12 13-7h16l10-15 12 23 13-29 12 35 12-24 13 15 12-8h15" stroke="url(#wave)" stroke-width="2.5"/>
+  <path d="M676 427h360" stroke="#607878" stroke-opacity=".42"/>
+  <text x="676" y="464" fill="#7ddac6" font-family="ui-monospace,monospace" font-size="11">filtered output · clearer voice track</text>
+
+  <text x="66" y="628" fill="#708487" font-family="ui-monospace,monospace" font-size="11" letter-spacing="1.2">UPLOAD  /  PROCESS  /  LISTEN  /  DOWNLOAD</text>
+  <text x="1134" y="628" fill="#708487" font-family="ui-monospace,monospace" font-size="11" text-anchor="end">NOISE → VOICE</text>
+</svg>
