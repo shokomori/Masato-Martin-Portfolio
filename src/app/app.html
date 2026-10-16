@@ -89,12 +89,6 @@
     </nav>
 
     <div class="pane" aria-live="polite">
-      <p class="winbar">
-        <span>{{ selectedProject().path }}</span>
-        <span class="editor-mode">{{ focusMode() === 'terminal' ? 'INSERT' : 'NORMAL' }}</span>
-        <span class="editor-position">1:1 Top</span>
-      </p>
-
       <div class="buffer" #projectPane tabindex="0" aria-label="Project details" (focus)="focusProjectPane()">
         @for (line of getProjectBufferLines(); track $index; let index = $index) {
           <div class="ln" [class.is-tilde]="index === 0">
@@ -119,30 +113,7 @@
         }
       </div>
       <div class="eye-host" #eyeHost aria-hidden="true">
-        <div class="eye-shell">
-          <span class="eye-type">
-            <span [style.translate]="getEyeTextOffset(0)">design · code</span>
-            <span [style.translate]="getEyeTextOffset(1)">angular · github · ux</span>
-            <span [style.translate]="getEyeTextOffset(2)">web · projects · cloud · aws</span>
-            <span [style.translate]="getEyeTextOffset(3)">typescript · portfolio · angular · github</span>
-            <span [style.translate]="getEyeTextOffset(4)">lorekeeper · voxfilter · gitsprint · ux</span>
-            <span [style.translate]="getEyeTextOffset(5)">design · angular · portfolio · github · code</span>
-            <span [style.translate]="getEyeTextOffset(6)">masato martin · cloud · typescript · projects</span>
-            <span [style.translate]="getEyeTextOffset(7)">angular · github · portfolio · code · ux</span>
-            <span [style.translate]="getEyeTextOffset(8)">lorekeeper · voxfilter · gitsprint · angular</span>
-            <span [style.translate]="getEyeTextOffset(9)">angular · github · portfolio · code · ux</span>
-            <span [style.translate]="getEyeTextOffset(10)">masato martin · cloud · typescript · projects</span>
-            <span [style.translate]="getEyeTextOffset(11)">design · angular · portfolio · github · code</span>
-            <span [style.translate]="getEyeTextOffset(12)">lorekeeper · voxfilter · gitsprint · ux</span>
-            <span [style.translate]="getEyeTextOffset(13)">typescript · portfolio · angular · github</span>
-            <span [style.translate]="getEyeTextOffset(14)">web · projects · cloud · aws</span>
-            <span [style.translate]="getEyeTextOffset(15)">angular · github · ux</span>
-            <span [style.translate]="getEyeTextOffset(16)">design · code</span>
-            <span class="eye-live-code">u {{ pointerTelemetry().tracked ? pointerTelemetry().u.toFixed(3) : '--' }} · v {{ pointerTelemetry().tracked ? pointerTelemetry().v.toFixed(3) : '--' }}</span>
-          </span>
-          <div class="eye-pupil" [style.transform]="eyeTransform()"></div>
-        </div>
-        <span class="eye-readout">{{ eyeReadout() }}</span>
+        <iframe #eyeFrame class="eye-frame" src="eye-demo.html" title="Animated text eye" tabindex="-1"></iframe>
       </div>
 
       <section class="terminal-shell" aria-label="Workspace terminal">
@@ -199,6 +170,7 @@
 
   <section class="desk" #deskHost aria-label="Live keyboard and pointer telemetry">
     <canvas #deskCanvas class="desk-art" aria-hidden="true"></canvas>
+    <iframe #handsFrame class="hands-frame" src="hands-demo.html" title="Animated keyboard hands" tabindex="-1"></iframe>
     <div class="input-telemetry">
       <header class="input-head">
         <span>INPUT / LIVE TRACE</span>

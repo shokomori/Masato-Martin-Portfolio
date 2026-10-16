@@ -285,8 +285,6 @@ export class App implements AfterViewInit, OnDestroy {
     { title: 'Start the UX Design Process: Empathize, Define, and Ideate', file: 'Start the UX Design Process Empathize, Define, and Ideate.jpg' },
   ];
   protected readonly terminalTyping = signal(false);
-  protected readonly eyeReadout = signal('PUPIL · wheel · 0.00, 0.00 · UV --, --');
-  protected readonly eyeTransform = signal('translate(0px, 0px)');
   protected readonly activeKeyCodes = signal<string[]>([]);
   protected readonly scriptedKeyCode = signal<string | null>(null);
   protected readonly pointerTelemetry = signal<PointerTelemetry>({
@@ -354,11 +352,13 @@ export class App implements AfterViewInit, OnDestroy {
   @ViewChild('wheelHost') private wheelHost?: ElementRef<HTMLElement>;
   @ViewChild('wheelInk') private wheelInk?: ElementRef<HTMLCanvasElement>;
   @ViewChild('trackingLine') private trackingLine?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('eyeFrame') private eyeFrame?: ElementRef<HTMLIFrameElement>;
+  @ViewChild('handsFrame') private handsFrame?: ElementRef<HTMLIFrameElement>;
+  @ViewChild('eyeHost') private eyeHost?: ElementRef<HTMLElement>;
   @ViewChild('deskCanvas') private deskCanvas?: ElementRef<HTMLCanvasElement>;
   @ViewChild('deskHost') private deskHost?: ElementRef<HTMLElement>;
   @ViewChild('projectPane') private projectPane?: ElementRef<HTMLElement>;
   @ViewChild('commandInput') private commandInput?: ElementRef<HTMLInputElement>;
-  @ViewChild('eyeHost') private eyeHost?: ElementRef<HTMLElement>;
   @ViewChild('terminalOutput') private terminalOutput?: ElementRef<HTMLElement>;
   @ViewChild('interactionLayer') private interactionLayer?: ElementRef<HTMLElement>;
 
@@ -372,12 +372,7 @@ export class App implements AfterViewInit, OnDestroy {
   private projectRevealAnimation: Animation | null = null;
   private projectCardAnimation: Animation | null = null;
   private pointerAnimations = new Set<Animation>();
-  private eyeBounds = { left: 0, top: 0, width: 0, height: 0 };
-  private eyeTravel = 19;
-  private eyeTarget = { x: 0, y: 0 };
-  private eyePosition = { x: 0, y: 0 };
   private pointerPosition = { x: 0, y: 0, type: 'mouse' };
-  private eyeIdleTimer: number | null = null;
   private wheelDelta = 0;
   private wheelLocked = false;
   private wheelUnlockTimer: number | null = null;
@@ -398,15 +393,16 @@ export class App implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     this.measureWheelGeometry();
-    this.measureEyeBounds();
     const overlay = this.trackingLine?.nativeElement;
+    const eyeFrame = this.eyeFrame?.nativeElement;
+    const handsFrame = this.handsFrame?.nativeElement;
+    const eyeHost = this.eyeHost?.nativeElement;
     const desk = this.deskCanvas?.nativeElement;
     const deskHost = this.deskHost?.nativeElement;
     const wheelHost = this.wheelHost?.nativeElement;
-    const eyeHost = this.eyeHost?.nativeElement;
     const themeRoot = document.querySelector<HTMLElement>('app-root');
-    if (overlay && desk && deskHost && wheelHost && eyeHost && themeRoot) {
-      this.workspaceEffects = createWorkspaceEffects({ overlay, desk, deskHost, wheelHost, eyeHost, themeRoot });
+    if (overlay && eyeFrame && handsFrame && eyeHost && desk && deskHost && wheelHost && themeRoot) {
+      this.workspaceEffects = createWorkspaceEffects({ overlay, eyeFrame, handsFrame, eyeHost, desk, deskHost, wheelHost, themeRoot });
     }
     this.wheelDebug.set(new URLSearchParams(window.location.search).get('debug') === '1');
     if (this.wheelDebug()) {
@@ -416,16 +412,12 @@ export class App implements AfterViewInit, OnDestroy {
     if (typeof ResizeObserver !== 'undefined') {
       this.wheelResizeObserver = new ResizeObserver(() => {
         this.measureWheelGeometry();
-        this.measureEyeBounds();
         if (this.wheelDebug()) {
           window.requestAnimationFrame(() => this.logWheelBounds());
         }
       });
       if (this.wheelHost) {
         this.wheelResizeObserver.observe(this.wheelHost.nativeElement);
-      }
-      if (this.eyeHost) {
-        this.wheelResizeObserver.observe(this.eyeHost.nativeElement);
       }
     }
   }
@@ -445,9 +437,6 @@ export class App implements AfterViewInit, OnDestroy {
       animation.cancel();
     }
     this.pointerAnimations.clear();
-    if (this.eyeIdleTimer !== null) {
-      window.clearTimeout(this.eyeIdleTimer);
-    }
     if (this.wheelUnlockTimer !== null) {
       window.clearTimeout(this.wheelUnlockTimer);
     }
@@ -464,8 +453,6 @@ export class App implements AfterViewInit, OnDestroy {
     if (event.pointerType === 'touch') {
       return;
     }
-    this.lookTowardPointer(event.clientX, event.clientY);
-    this.resetEyeWhenIdle();
   }
 
   protected onWindowPointerDown(event: PointerEvent): void {
@@ -507,20 +494,15 @@ export class App implements AfterViewInit, OnDestroy {
   protected onWindowPointerUp(event: PointerEvent): void {
     this.updatePointerTelemetry(event.clientX, event.clientY, event.pointerType || 'mouse');
     this.setPointerButtons(event.buttons);
-    if (event.pointerType === 'touch') {
-      this.returnEyeToRest();
-    }
   }
 
   protected onWindowLeave(): void {
     this.pointerButtons.set([]);
-    this.returnEyeToRest();
   }
 
   protected onWindowBlur(): void {
     this.activeKeyCodes.set([]);
     this.pointerButtons.set([]);
-    this.returnEyeToRest();
   }
 
   protected onInputKeyDown(event: KeyboardEvent): void {
@@ -543,13 +525,11 @@ export class App implements AfterViewInit, OnDestroy {
       this.finishTerminalTyping();
       this.activeKeyCodes.set([]);
       this.pointerButtons.set([]);
-      this.returnEyeToRest();
     }
   }
 
   protected onWindowGeometryChange(): void {
     this.measureWheelGeometry();
-    this.measureEyeBounds();
     if (this.pointerTelemetry().tracked) {
       this.updatePointerTelemetry(this.pointerPosition.x, this.pointerPosition.y, this.pointerPosition.type);
     }
@@ -658,19 +638,6 @@ export class App implements AfterViewInit, OnDestroy {
       this.nextScreenshot();
     }
 
-    const gazeDirections: Record<string, { x: number; y: number }> = {
-      arrowleft: { x: -12, y: 0 },
-      arrowright: { x: 12, y: 0 },
-      arrowup: { x: 0, y: -12 },
-      arrowdown: { x: 0, y: 12 },
-      j: { x: 0, y: 12 },
-      k: { x: 0, y: -12 },
-    };
-    const gaze = gazeDirections[key];
-    if (gaze) {
-      this.setEyeTarget(gaze.x, gaze.y);
-      this.resetEyeWhenIdle();
-    }
   }
 
   protected getProjectBufferLines(project = this.selectedProject()): ProjectInfoLine[] {
@@ -707,11 +674,6 @@ export class App implements AfterViewInit, OnDestroy {
 
   protected getProjectZIndex(index: number): number {
     return 100 - 8 * Math.abs(this.getRelativeProjectOffset(index));
-  }
-
-  protected getEyeTextOffset(index: number): string {
-    const factor = 0.18 + (index % 3) * 0.09;
-    return `${(this.eyePosition.x * factor).toFixed(2)}px ${(this.eyePosition.y * factor).toFixed(2)}px`;
   }
 
   protected isKeyActive(code: string): boolean {
@@ -874,8 +836,6 @@ export class App implements AfterViewInit, OnDestroy {
         document.getElementById(`project-option-${this.selectedProject().id}`)?.focus({ preventScroll: true });
       });
     }
-    this.setEyeTarget(direction * 8, 0);
-    this.resetEyeWhenIdle();
   }
 
   protected onWheelItemClick(event: MouseEvent, index: number): void {
@@ -1073,24 +1033,6 @@ export class App implements AfterViewInit, OnDestroy {
     window.requestAnimationFrame(() => this.workspaceEffects?.recolor());
   }
 
-  protected focusTerminal(): void {
-    this.focusMode.set('terminal');
-    this.setEyeTarget(10, 8);
-    this.resetEyeWhenIdle();
-  }
-
-  protected focusWheel(): void {
-    this.focusMode.set('wheel');
-    this.setEyeTarget(-10, 0);
-    this.resetEyeWhenIdle();
-  }
-
-  protected focusProjectPane(): void {
-    this.focusMode.set('pane');
-    this.setEyeTarget(10, 0);
-    this.resetEyeWhenIdle();
-  }
-
   protected onTerminalInput(event: Event): void {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) {
@@ -1099,6 +1041,18 @@ export class App implements AfterViewInit, OnDestroy {
     this.terminalInput.set(target.value);
     this.terminalHistoryIndex.set(null);
     this.terminalDraft = target.value;
+  }
+
+  protected focusTerminal(): void {
+    this.focusMode.set('terminal');
+  }
+
+  protected focusWheel(): void {
+    this.focusMode.set('wheel');
+  }
+
+  protected focusProjectPane(): void {
+    this.focusMode.set('pane');
   }
 
   protected onTerminalKeydown(event: KeyboardEvent): void {
@@ -1330,50 +1284,6 @@ export class App implements AfterViewInit, OnDestroy {
     context.globalAlpha = 1;
   }
 
-  private measureEyeBounds(): void {
-    const eyeHost = this.eyeHost?.nativeElement;
-    if (!eyeHost) {
-      return;
-    }
-
-    const rect = eyeHost.getBoundingClientRect();
-    this.eyeBounds = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
-    const shell = eyeHost.querySelector<HTMLElement>('.eye-shell');
-    const pupil = eyeHost.querySelector<HTMLElement>('.eye-pupil');
-    if (shell && pupil) {
-      const shellRect = shell.getBoundingClientRect();
-      const pupilRect = pupil.getBoundingClientRect();
-      this.eyeTravel = Math.max(4, Math.min(14, (shellRect.width - pupilRect.width) / 2 - 4));
-    }
-  }
-
-  private lookTowardPointer(clientX: number, clientY: number): void {
-    if (!this.eyeBounds.width || !this.eyeBounds.height) {
-      this.measureEyeBounds();
-    }
-    if (!this.eyeBounds.width || !this.eyeBounds.height) {
-      return;
-    }
-
-    const dx = clientX - (this.eyeBounds.left + this.eyeBounds.width / 2);
-    const dy = clientY - (this.eyeBounds.top + this.eyeBounds.height / 2);
-    const distance = Math.hypot(dx, dy);
-    const travel = Math.min(1, distance / 180) * this.eyeTravel;
-    this.setEyeTarget(
-      distance ? (dx / distance) * travel : 0,
-      distance ? (dy / distance) * travel : 0,
-    );
-  }
-
-  private setEyeTarget(x: number, y: number): void {
-    this.eyeTarget = {
-      x: Math.max(-this.eyeTravel, Math.min(this.eyeTravel, x)),
-      y: Math.max(-this.eyeTravel, Math.min(this.eyeTravel, y)),
-    };
-    this.eyePosition = { ...this.eyeTarget };
-    this.updateEyeTransform();
-  }
-
   private updatePointerTelemetry(x: number, y: number, type: string): void {
     this.pointerPosition = { x, y, type };
     const viewportWidth = Math.max(1, window.innerWidth);
@@ -1397,7 +1307,6 @@ export class App implements AfterViewInit, OnDestroy {
       return;
     }
     this.pointerTelemetry.set(next);
-    this.updateEyeReadout();
   }
 
   private setPointerButtons(buttonMask: number): void {
@@ -1433,21 +1342,6 @@ export class App implements AfterViewInit, OnDestroy {
     return aliases[key] ?? key;
   }
 
-  private updateEyeTransform(): void {
-    this.eyeTransform.set(
-      `translate(${this.eyePosition.x.toFixed(2)}px, ${this.eyePosition.y.toFixed(2)}px)`,
-    );
-    this.updateEyeReadout();
-  }
-
-  private updateEyeReadout(): void {
-    const pointer = this.pointerTelemetry();
-    const normalized = pointer.tracked ? `${pointer.u.toFixed(3)}, ${pointer.v.toFixed(3)}` : '--, --';
-    this.eyeReadout.set(
-      `PUPIL · ${this.focusMode()} · ${this.eyePosition.x.toFixed(2)}, ${this.eyePosition.y.toFixed(2)} · UV ${normalized}`,
-    );
-  }
-
   private revealSelectedProject(): void {
     const pane = this.projectPane?.nativeElement;
     if (!pane || typeof pane.animate !== 'function' || this.prefersReducedMotion()) {
@@ -1462,24 +1356,6 @@ export class App implements AfterViewInit, OnDestroy {
       ],
       { duration: 420, easing: 'cubic-bezier(0.2, 0.72, 0.24, 1)' },
     );
-  }
-
-  private resetEyeWhenIdle(): void {
-    if (this.eyeIdleTimer !== null) {
-      window.clearTimeout(this.eyeIdleTimer);
-    }
-    this.eyeIdleTimer = window.setTimeout(() => {
-      this.eyeIdleTimer = null;
-      this.setEyeTarget(0, 0);
-    }, 1500);
-  }
-
-  private returnEyeToRest(): void {
-    if (this.eyeIdleTimer !== null) {
-      window.clearTimeout(this.eyeIdleTimer);
-      this.eyeIdleTimer = null;
-    }
-    this.setEyeTarget(0, 0);
   }
 
   private prefersReducedMotion(): boolean {

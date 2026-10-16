@@ -172,9 +172,8 @@ describe('App workspace interactions', () => {
     expect(normalizedText(element.querySelector('.pointer-coordinates'))).toContain(
       `UV ${(256 / window.innerWidth).toFixed(3)} / ${(192 / window.innerHeight).toFixed(3)}`,
     );
-    expect(normalizedText(element.querySelector('.eye-live-code'))).toContain(
-      `u ${(256 / window.innerWidth).toFixed(3)} · v ${(192 / window.innerHeight).toFixed(3)}`,
-    );
+    expect(element.querySelector<HTMLIFrameElement>('.eye-frame')?.getAttribute('src')).toBe('eye-demo.html');
+    expect(element.querySelector<HTMLIFrameElement>('.hands-frame')?.getAttribute('src')).toBe('hands-demo.html');
     expect(parseFloat(element.querySelector<HTMLElement>('.pointer-dot')?.style.left ?? '0')).toBeCloseTo(
       (256 / window.innerWidth) * 100,
       1,
@@ -200,7 +199,8 @@ describe('App workspace interactions', () => {
     fixture.detectChanges();
 
     expect(selectedProject(element)).toBe('VoxFilter');
-    expect(element.querySelector('.winbar')?.textContent).toContain('~/Projects/voxfilter');
+    expect(element.querySelector('.winbar')).toBeNull();
+    expect(element.querySelector('.buffer')?.textContent).toContain('~/Projects/voxfilter');
     expect(element.querySelector('.buffer')?.textContent).toContain('background noise');
     expect(element.querySelector('.bar-state .col:nth-child(2) .value')?.textContent).toContain('VoxFilter');
     expect(normalizedText(element.querySelector('.terminal-output'))).toContain('project: VoxFilter');
@@ -418,7 +418,7 @@ describe('App workspace interactions', () => {
     await waitForTerminalText(fixture, 'project: VoxFilter');
     fixture.detectChanges();
     expect(selectedProject(element)).toBe('VoxFilter');
-    expect(element.querySelector('.winbar')?.textContent).toContain('~/Projects/voxfilter');
+    expect(element.querySelector('.buffer')?.textContent).toContain('~/Projects/voxfilter');
     expect(element.querySelector('.terminal-output')?.textContent).toContain('project: VoxFilter');
     expect(element.querySelector('.terminal-output')?.textContent).toContain('› :e ~/Projects/voxfilter');
 

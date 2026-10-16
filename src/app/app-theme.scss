@@ -470,36 +470,10 @@ input {
   position: relative;
   z-index: 0;
   display: grid;
-  grid-template-rows: 26px minmax(0, 1fr) 116px;
+  grid-template-rows: minmax(0, 1fr) 116px;
   min-width: 0;
   min-height: 0;
-  background: rgba(255, 255, 255, 0.01);
-}
-
-.winbar {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 12px 0 14px;
-  overflow: hidden;
-  color: var(--dim);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 11px;
-}
-
-.editor-mode,
-.editor-position {
-  flex: 0 0 auto;
-  color: var(--dim);
-  font-size: 9px;
-  text-transform: uppercase;
-}
-
-.editor-mode {
-  color: var(--accent);
+  background: transparent;
 }
 
 .buffer {
@@ -512,6 +486,10 @@ input {
   outline: none;
   scrollbar-width: none;
   will-change: clip-path, opacity;
+}
+
+.terminal-output {
+  scrollbar-width: none;
 }
 
 .buffer::before {
@@ -533,6 +511,7 @@ input {
 }
 
 .buffer::-webkit-scrollbar,
+.terminal-output::-webkit-scrollbar,
 html::-webkit-scrollbar {
   display: none;
 }
@@ -636,124 +615,15 @@ html::-webkit-scrollbar {
   width: 224px;
   height: 136px;
   pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   contain: layout;
 }
 
-.eye-shell {
-  position: relative;
-  width: 190px;
-  height: 104px;
-  display: grid;
-  place-items: center;
-}
-
-.eye-type {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 218px;
-  color: var(--dim);
-  font: 500 4.8px/5px 'Plex Mono', ui-monospace, monospace;
-  letter-spacing: 0.2px;
-  text-align: center;
-  white-space: pre;
-  opacity: 0.9;
-  transform: translate(-50%, -50%);
-  mask-image: radial-gradient(ellipse 49% 48% at 50% 50%, #000 60%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 49% 48% at 50% 50%, #000 60%, transparent 100%);
-}
-
-.eye-type span {
+.eye-frame {
   display: block;
-  white-space: nowrap;
-  will-change: transform, translate, opacity;
-  transition: translate 120ms cubic-bezier(0.2, 0.72, 0.24, 1);
-  animation: eyeTextDrift 5s ease-in-out infinite alternate;
-}
-
-.eye-type span:nth-child(3n + 1) {
-  animation-duration: 3.7s;
-}
-
-.eye-type span:nth-child(3n + 2) {
-  animation-duration: 4.6s;
-  animation-direction: alternate-reverse;
-}
-
-.eye-type span:nth-child(3n) {
-  animation-duration: 5.2s;
-  animation-delay: -1.4s;
-}
-
-@keyframes eyeTextDrift {
-  0% {
-    opacity: 0.36;
-    transform: translate3d(-4px, 1px, 0);
-  }
-  50% {
-    opacity: 0.92;
-    transform: translate3d(0, 0, 0);
-  }
-  100% {
-    opacity: 0.42;
-    transform: translate3d(4px, 1px, 0);
-  }
-}
-
-.eye-pupil {
-  position: absolute;
-  left: calc(50% - 14px);
-  top: calc(50% - 17px);
-  width: 28px;
-  height: 34px;
-  border: 1px solid var(--chrome);
-  background: var(--bg);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--dim) 35%, transparent);
-  transform: translate(0px, 0px);
-  will-change: transform;
-  transition: transform 120ms cubic-bezier(0.2, 0.72, 0.24, 1);
-}
-
-.eye-pupil::before {
-  content: '';
-  position: absolute;
-  inset: 7px 8px;
-  border: 1px solid color-mix(in srgb, var(--chrome) 75%, transparent);
-}
-
-.eye-pupil::after {
-  content: '';
-  position: absolute;
-  left: calc(50% - 2px);
-  top: calc(50% - 2px);
-  width: 4px;
-  height: 4px;
-  background: var(--ink);
-  opacity: 0.75;
-}
-
-.eye-readout {
   width: 100%;
-  margin-top: 10px;
-  color: var(--dim);
-  text-align: center;
-  font: 7px/9px 'Plex Mono', ui-monospace, monospace;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.eye-live-code {
-  color: var(--accent);
-  animation: none !important;
-  font-size: 4px;
-  letter-spacing: 0.2px;
+  height: 100%;
+  border: 0;
+  background: transparent;
 }
 
 .bar {
@@ -867,10 +737,21 @@ html::-webkit-scrollbar {
   position: absolute;
   z-index: 1;
   inset: 0;
-  display: block;
+  display: none;
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+
+.hands-frame {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
 }
 
 .input-telemetry {
@@ -1063,6 +944,11 @@ html::-webkit-scrollbar {
   top: 0;
   width: 50%;
   height: 11px;
+  transform-origin: center top;
+  transition:
+    background-color 90ms ease,
+    box-shadow 90ms ease,
+    transform 90ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .mouse-left {
@@ -1087,8 +973,11 @@ html::-webkit-scrollbar {
 
 .mouse-device.is-left-pressed .mouse-left,
 .mouse-device.is-right-pressed .mouse-right {
-  background: color-mix(in srgb, var(--accent) 70%, transparent);
-  box-shadow: 0 0 7px var(--accent);
+  transform: translateY(1px) scaleY(0.78);
+  background: color-mix(in srgb, var(--accent) 82%, transparent);
+  box-shadow:
+    inset 0 -2px 2px color-mix(in srgb, var(--ink) 55%, transparent),
+    0 0 9px var(--accent);
 }
 
 .pointer-coordinates {
@@ -1658,6 +1547,7 @@ html::-webkit-scrollbar {
 @media (max-width: 900px) {
   app-root {
     --margin: 28px;
+    --desk-h: min(30vw, 310px);
     --wheel-col-width: clamp(220px, 31vw, 280px);
     --eye-w: 190px;
   }
@@ -1668,7 +1558,7 @@ html::-webkit-scrollbar {
   }
 
   .stage {
-    grid-template-rows: 88px min(61vh, 290px) 72px minmax(35px, 1fr);
+    grid-template-rows: 88px min(61vh, 290px) 72px minmax(var(--desk-h), 1fr);
   }
 
   .frame-top {
@@ -1733,6 +1623,7 @@ html::-webkit-scrollbar {
 @media (max-width: 700px) {
   app-root {
     --margin: 18px;
+    --desk-h: 184px;
     --wheel-col-width: 100%;
     --eye-w: 112px;
   }
@@ -1770,37 +1661,6 @@ html::-webkit-scrollbar {
     bottom: 4px;
     width: 92px;
     height: 116px;
-  }
-
-  .eye-shell {
-    width: 92px;
-    height: 54px;
-  }
-
-  .eye-type {
-    width: 112px;
-    font-size: 2.6px;
-    line-height: 2.8px;
-  }
-
-  .eye-pupil {
-    width: 10px;
-    height: 14px;
-    left: calc(50% - 5px);
-    top: calc(50% - 7px);
-  }
-
-  .eye-pupil::after {
-    left: calc(50% - 2px);
-    top: calc(50% - 2px);
-    width: 4px;
-    height: 4px;
-  }
-
-  .eye-readout {
-    margin-top: 0;
-    font-size: 6px;
-    line-height: 8px;
   }
 
   .input-telemetry {
@@ -2073,11 +1933,7 @@ html::-webkit-scrollbar {
   }
 
   .pane {
-    grid-template-rows: 26px minmax(0, 1fr) 116px;
-  }
-
-  .winbar {
-    display: none;
+    grid-template-rows: minmax(0, 1fr) 116px;
   }
 
   .tabline {
@@ -2157,37 +2013,6 @@ html::-webkit-scrollbar {
     transform: translateX(-50%);
   }
 
-  .eye-shell {
-    width: 60px;
-    height: 38px;
-  }
-
-  .eye-type {
-    width: 92px;
-    font-size: 1.8px;
-    line-height: 2px;
-  }
-
-  .eye-pupil {
-    width: 8px;
-    height: 11px;
-    left: calc(50% - 4px);
-    top: calc(50% - 5.5px);
-  }
-
-  .eye-pupil::after {
-    left: calc(50% - 1.5px);
-    top: calc(50% - 1.5px);
-    width: 3px;
-    height: 3px;
-  }
-
-  .eye-readout {
-    margin-top: 0;
-    font-size: 6px;
-    line-height: 8px;
-  }
-
   .bar {
     gap: 8px;
     overflow: hidden;
@@ -2264,8 +2089,8 @@ html::-webkit-scrollbar {
 
 @media (min-width: 901px) {
   app-root {
-    --wide: 1120px;
-    --bar-h: 54px;
+    --wide: 850px;
+    --bar-h: 36px;
     --desk-h: 192px;
     --eye-w: 224px;
   }
@@ -2273,11 +2098,10 @@ html::-webkit-scrollbar {
   .stage {
     grid-template-columns: min(calc(100vw - 2 * var(--margin)), var(--wide));
     grid-template-rows:
-      calc(6 * var(--cell-h))
+      60px
       minmax(0, 1fr)
       var(--bar-h)
-      var(--desk-h)
-      var(--cell-h);
+      var(--desk-h);
   }
 
   .frame-top,
@@ -2288,32 +2112,45 @@ html::-webkit-scrollbar {
   }
 
   .editor {
-    grid-template-columns: calc(34 * var(--cell-w)) minmax(0, 1fr);
+    grid-template-columns: calc(27 * var(--cell-w)) minmax(0, 1fr);
   }
 
-  .pane {
-    background: color-mix(in srgb, var(--surface) 58%, transparent);
+  .brand,
+  .switch {
+    top: 22px;
   }
 
-  .winbar {
-    border-bottom: 1px solid color-mix(in srgb, var(--dim) 16%, transparent);
+  .buffer::before {
+    display: none;
+  }
+
+  .eye-host {
+    width: var(--eye-w);
+    height: 136px;
+  }
+
+  .hands-frame {
+    right: auto;
+    left: 50%;
+    width: min(100%, 640px);
+    transform: translateX(-50%);
   }
 
   .bar {
     align-items: center;
-    gap: calc(3 * var(--cell-w));
+    gap: 12px;
     border-top-color: color-mix(in srgb, var(--chrome) 34%, transparent);
   }
 
   .bar-id {
-    min-width: calc(34 * var(--cell-w));
+    min-width: 190px;
     padding-top: 0;
   }
 
   .bar-state {
     flex: 1 1 auto;
     justify-content: space-between;
-    gap: calc(2.5 * var(--cell-w));
+    gap: 10px;
   }
 
   .bar-state .col {
@@ -2327,5 +2164,24 @@ html::-webkit-scrollbar {
   .shot .frame img {
     height: clamp(210px, 32vh, 360px);
     object-fit: cover;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1300px) {
+  app-root {
+    --desk-h: 0px;
+  }
+
+  .stage {
+    grid-template-rows: 60px minmax(0, 1fr) var(--bar-h) 0;
+  }
+
+  .brand,
+  .switch {
+    top: 22px;
+  }
+
+  .desk {
+    display: none;
   }
 }

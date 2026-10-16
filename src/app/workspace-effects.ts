@@ -27,8 +27,8 @@ export const WORKSPACE_EFFECTS_CONFIG = {
   mouseHandLeadMs: 35,
   mouseWristXOffsetPalmUnits: 0.12,
   mouseWristYOffsetPalmUnits: 0.68,
-  mouseClickDurationMs: 90,
-  mouseClickDipPx: 1,
+  mouseClickDurationMs: 240,
+  mouseClickDipPx: 2.5,
   travelArcRatio: 0.12,
   anticipateDurationMs: 25,
   anticipateRetractKeys: 0.04,
@@ -70,6 +70,8 @@ export const WORKSPACE_EFFECTS_CONFIG = {
 
 type WorkspaceEffectOptions = {
   overlay: HTMLCanvasElement;
+  eyeFrame: HTMLIFrameElement;
+  handsFrame: HTMLIFrameElement;
   desk: HTMLCanvasElement;
   deskHost: HTMLElement;
   wheelHost: HTMLElement;
@@ -78,6 +80,14 @@ type WorkspaceEffectOptions = {
 };
 
 type Point = { x: number; y: number };
+type EyeDemo = {
+  core: {
+    st: { px: number; py: number };
+    setTarget(x: number, y: number): void;
+  };
+  blink(): void;
+};
+type EyeDemoWindow = Window & { __eye?: EyeDemo };
 type SpringPoint = Point & { vx: number; vy: number; initialized: boolean };
 type SpringValue = { value: number; velocity: number; initialized: boolean };
 type Palette = { bg: string; ink: string; dim: string; accent: string; line: string; chrome: string };
@@ -177,10 +187,11 @@ const FINGER_HAND_CODES: Record<HandSide, Record<number, string[]>> = {
 };
 
 export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
-  const { overlay, desk, deskHost, wheelHost, eyeHost, themeRoot } = options;
+  const { overlay, eyeFrame, handsFrame, desk, deskHost, wheelHost, eyeHost, themeRoot } = options;
   const media = window.matchMedia('(prefers-reduced-motion: reduce)');
   const mouseButtons = new Set<number>();
   const mouseClickAt = new Map<number, number>();
+  const mouseClickReleaseAt = new Map<number, number>();
   const keyStrikes: KeyStrike[] = [];
   const keyPresses = new Map<string, KeyPress>();
   const queuedStrikes: Array<{ code: string; at: number; queuedAt: number }> = [];
@@ -233,6 +244,7 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
   let lastWheelAt = -Infinity;
   let debug = new URLSearchParams(window.location.search).get('debug') === 'desk';
   let debugInfo = { burst: 0, queue: 0, autoTyping: false };
+  let eyeDemo: EyeDemo | null = null;
 
   function createHand() {
     const springBox = () => ({ left: valueSpring(), top: valueSpring(), right: valueSpring(), bottom: valueSpring() });
@@ -330,6 +342,35 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
     requestFrame();
   }
 
+  function onHandsFrameLoad() {
+    const frameDocument = handsFrame.contentDocument;
+    if (!frameDocument?.querySelector('#c')) {
+      console.error('The embedded hands demo did not initialize.');
+      return;
+    }
+    frameDocument.documentElement.style.background = 'transparent';
+    frameDocument.body.style.background = 'transparent';
+    frameDocument.documentElement.style.overflow = 'hidden';
+    frameDocument.body.style.overflow = 'hidden';
+    const demoHint = frameDocument.querySelector<HTMLElement>('.hint');
+    if (demoHint) demoHint.style.display = 'none';
+  }
+
+  function forwardHandsKey(event: KeyboardEvent) {
+    const frameWindow = handsFrame.contentWindow;
+    if (!frameWindow?.document.querySelector('#c')) return;
+    frameWindow.dispatchEvent(new KeyboardEvent(event.type, {
+      key: event.key,
+      code: event.code,
+      repeat: event.repeat,
+      shiftKey: event.shiftKey,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+      cancelable: true,
+    }));
+  }
+
   function requestFrame() {
     if (!destroyed && pageVisible && visible && !frame) {
       frame = window.requestAnimationFrame(draw);
@@ -365,15 +406,50 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
       rightState === 'TO_KEYS' ||
       Math.abs(hands.left.wrist.vx) + Math.abs(hands.left.wrist.vy) > 0.1 ||
       Math.abs(hands.right.wrist.vx) + Math.abs(hands.right.wrist.vy) > 0.1;
-    if (window.innerWidth > 700 && animating) frame = window.requestAnimationFrame(draw);
+    if (animating) frame = window.requestAnimationFrame(draw);
+  }
+
+  function onEyeFrameLoad() {
+    const frameDocument = eyeFrame.contentDocument;
+    const frameWindow = eyeFrame.contentWindow as EyeDemoWindow | null;
+    const demo = frameWindow?.__eye;
+    if (!frameDocument || !demo) {
+      console.error('The embedded eye demo did not initialize.');
+      return;
+    }
+    frameDocument.documentElement.style.background = 'transparent';
+    frameDocument.body.style.background = 'transparent';
+    const demoLine = frameDocument.querySelector<HTMLCanvasElement>('#overlay');
+    const demoHint = frameDocument.querySelector<HTMLElement>('.hint');
+    if (demoLine) demoLine.style.display = 'none';
+    if (demoHint) demoHint.style.display = 'none';
+    eyeDemo = demo;
+    if (cursorPosition) setEyeTarget(cursorPosition);
+    requestFrame();
+  }
+
+  function setEyeTarget(point: Point) {
+    const innerEye = eyeFrame.contentDocument?.getElementById('eye');
+    if (!eyeDemo || !innerEye) return;
+    const frameBounds = eyeFrame.getBoundingClientRect();
+    const innerBounds = innerEye.getBoundingClientRect();
+    eyeDemo.core.setTarget(
+      point.x - frameBounds.left - innerBounds.left,
+      point.y - frameBounds.top - innerBounds.top,
+    );
   }
 
   function drawTrackingLine(timestamp: number) {
     const context = canvasContext(overlay, overlaySize);
     if (!context || media.matches || window.innerWidth <= 700) return;
-    const pupil = eyeHost.querySelector<HTMLElement>('.eye-pupil');
-    const bounds = (pupil ?? eyeHost).getBoundingClientRect();
-    const to = { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
+    const innerEye = eyeFrame.contentDocument?.getElementById('eye');
+    if (!eyeDemo || !innerEye) return;
+    const frameBounds = eyeFrame.getBoundingClientRect();
+    const innerBounds = innerEye.getBoundingClientRect();
+    const to = {
+      x: frameBounds.left + innerBounds.left + eyeDemo.core.st.px,
+      y: frameBounds.top + innerBounds.top + eyeDemo.core.st.py,
+    };
     const wheelBounds = wheelHost.getBoundingClientRect();
     const from = cursorPosition ?? { x: wheelBounds.right, y: wheelBounds.top + wheelBounds.height * 0.42 };
     context.strokeStyle = palette.dim;
@@ -957,7 +1033,9 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
 
   function clickAlpha(button: number, timestamp: number) {
     if (mouseButtons.has(button)) return 1;
-    const elapsed = timestamp - (mouseClickAt.get(button) ?? -Infinity);
+    const releasedAt = mouseClickReleaseAt.get(button);
+    if (releasedAt === undefined) return 0;
+    const elapsed = timestamp - releasedAt;
     return Math.max(0, 1 - elapsed / WORKSPACE_EFFECTS_CONFIG.mouseClickDurationMs);
   }
 
@@ -1008,26 +1086,41 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
     const drawButton = (button: number, left: boolean) => {
       const alpha = clickAlpha(button, timestamp);
       if (alpha <= 0) return;
-      const outerX = left ? point.x : box.right - 1;
-      const innerX = left ? box.left + 1 : point.x;
+      const pressed = mouseButtons.has(button);
+      const edgeX = left ? box.left + 1 : box.right - 1;
+      const buttonX = (edgeX + point.x) / 2;
+      const buttonY = (box.top + dividerY) / 2;
+      const dip = pressed ? WORKSPACE_EFFECTS_CONFIG.mouseClickDipPx : 0;
       context.save();
+      context.beginPath();
+      context.moveTo(point.x, box.top + 1 + dip);
+      context.lineTo(edgeX, box.top + 1 + dip);
+      context.lineTo(edgeX, dividerY - 1 + dip);
+      context.lineTo(point.x, dividerY - 1 + dip);
+      context.closePath();
       context.fillStyle = palette.accent;
-      context.globalAlpha = 0.88 * alpha;
-      context.beginPath();
-      context.moveTo(point.x, box.top + 1);
-      context.lineTo(outerX, box.top + 1);
-      context.lineTo(innerX, dividerY - 1);
-      context.closePath();
+      context.globalAlpha = (pressed ? 0.36 : 0.24) * alpha;
       context.fill();
-      context.globalAlpha = 0.95 * alpha;
       context.strokeStyle = palette.accent;
-      context.lineWidth = 1.5;
-      context.beginPath();
-      context.moveTo(point.x, box.top + 2);
-      context.lineTo(outerX, box.top + 2);
-      context.lineTo(innerX, dividerY - 1);
-      context.closePath();
+      context.lineWidth = 1.25;
+      context.globalAlpha = 0.95 * alpha;
       context.stroke();
+      context.beginPath();
+      context.moveTo(edgeX, dividerY - 1 + dip);
+      context.lineTo(point.x, dividerY - 1 + dip);
+      context.strokeStyle = pressed ? palette.ink : palette.accent;
+      context.globalAlpha = (pressed ? 0.75 : 0.35) * alpha;
+      context.lineWidth = pressed ? 1.5 : 1;
+      context.stroke();
+      if (!pressed) {
+        const pulse = Math.max(0, Math.min(1, 1 - alpha));
+        context.beginPath();
+        context.arc(buttonX, buttonY, 2 + pulse * 9, 0, Math.PI * 2);
+        context.strokeStyle = palette.accent;
+        context.lineWidth = 1.25;
+        context.globalAlpha = 0.65 * alpha;
+        context.stroke();
+      }
       context.restore();
     };
     drawButton(0, true);
@@ -1110,6 +1203,7 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
   function onPointerMove(event: PointerEvent) {
     const point = { x: event.clientX, y: event.clientY };
     cursorPosition = point;
+    setEyeTarget(point);
     if (event.isTrusted) {
       const now = performance.now();
       if (lastPointer) {
@@ -1138,12 +1232,18 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
   }
 
   function onPointerDown(event: PointerEvent) {
-    if (event.button === 0 || event.button === 2) mouseClickAt.set(event.button, performance.now());
+    if (event.button === 0 || event.button === 2) {
+      mouseClickAt.set(event.button, performance.now());
+      mouseClickReleaseAt.delete(event.button);
+    }
     syncMouseButtons(event.buttons);
     requestFrame();
   }
 
   function onPointerUp(event: PointerEvent) {
+    if ((event.button === 0 || event.button === 2) && mouseClickAt.has(event.button)) {
+      mouseClickReleaseAt.set(event.button, performance.now());
+    }
     syncMouseButtons(event.buttons);
     requestFrame();
   }
@@ -1156,6 +1256,8 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
   }
 
   function onPointerCancel() {
+    const releasedAt = performance.now();
+    for (const button of mouseButtons) mouseClickReleaseAt.set(button, releasedAt);
     mouseButtons.clear();
     requestFrame();
   }
@@ -1199,8 +1301,10 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
   }
 
   function onKeyDown(event: KeyboardEvent) {
+    forwardHandsKey(event);
     if (event.repeat) return;
     const now = performance.now();
+    if (event.key.toLowerCase() === 'b') eyeDemo?.blink();
     keyPresses.set(event.code, { startedAt: now, until: now + 140 });
     if (isKnownKey(event.code) && (rightState === 'MOUSE' || rightState === 'TO_MOUSE')) {
       transitionHand('TO_KEYS', now, restWrist('right'), true);
@@ -1209,6 +1313,7 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
   }
 
   function onKeyUp(event: KeyboardEvent) {
+    forwardHandsKey(event);
     const press = keyPresses.get(event.code);
     if (press) press.until = Math.max(press.until, performance.now() + 90);
     requestFrame();
@@ -1217,6 +1322,7 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
   function onWindowBlur() {
     mouseButtons.clear();
     mouseClickAt.clear();
+    mouseClickReleaseAt.clear();
     keyPresses.clear();
     queuedStrikes.length = 0;
     requestFrame();
@@ -1264,6 +1370,8 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
   resizeObserver?.observe(deskHost);
   resizeObserver?.observe(eyeHost);
   window.addEventListener('resize', onWindowResize, { passive: true });
+  eyeFrame.addEventListener('load', onEyeFrameLoad);
+  handsFrame.addEventListener('load', onHandsFrameLoad);
   window.addEventListener('pointermove', onPointerMove, { passive: true });
   window.addEventListener('pointerdown', onPointerDown, { passive: true });
   window.addEventListener('pointerup', onPointerUp, { passive: true });
@@ -1339,6 +1447,8 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
       observer?.disconnect();
       resizeObserver?.disconnect();
       window.removeEventListener('resize', onWindowResize);
+      eyeFrame.removeEventListener('load', onEyeFrameLoad);
+      handsFrame.removeEventListener('load', onHandsFrameLoad);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('pointerup', onPointerUp);

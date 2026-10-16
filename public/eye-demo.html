@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Text eye: reference implementation</title>
+<style>
+  /* Theme variables: the eye reads --ink only. Swap these like a theme switcher would. */
+  :root { --bg:#0c0c0c; --ink:#d8d4b4; --dim:#a8a385; --accent:#689e80; }
+  html, body { height:100%; margin:0; background:var(--bg); color:var(--ink);
+    font:12px/13px "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; }
+  .stage { position:relative; height:100%; display:grid; place-items:center; }
+  /* The host in the real site is about 200 x 118 CSS px (aspect-ratio 1.7), top-right of the text pane.
+     Everything inside scales with host width (S = width / 199). */
+  .eye-host { position:relative; width:min(90vw, 597px); aspect-ratio:1.7; pointer-events:none; }
+  .eye-host canvas { position:absolute; inset:0; width:100%; height:100%; }
+  .overlay { position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:30; }
+  .hint { position:fixed; left:12px; bottom:10px; color:var(--dim); opacity:.7; }
+</style>
+</head>
+<body>
+<div class="stage"><div class="eye-host" id="eye" aria-hidden="true"></div></div>
+<canvas class="overlay" id="overlay" aria-hidden="true"></canvas>
+<div class="hint">move the pointer · press B to blink · add ?debug to see the geometry</div>
+
+<script type="module">
+/* ============================================================================
+   TEXT EYE: measured from a 2x-DPR screenshot of the reference (all numbers are
+   CSS px at the reference host width of 199px; they scale by S = hostWidth/199).
+   ========================================================================== */
+const CFG = {
+  refW: 199,                 // reference host width in CSS px
+  cellW: 4.8, cellH: 9,      // text cell. This is the page's 7.2 x 13 cell scaled by 2/3
+  font: 8,                   // px, monospace (advance 0.6em = 4.8)
+  cols: 32,                  // the text stream is hard-wrapped at 32 columns, then clipped by the ellipse
+  rx: 65, ry: 40, ryU: 40, ryL: 40,   // symmetric ellipse, as in the reference            // ellipse semi-axes (measured: ~26-27 glyphs on the widest row, 9 rows tall)
+  pupil: 33.5,               // square reticle side
+  hole: 2,                   // cells: radius of the cleared zone at the pupil center
+  infl: 3.8,                 // cells: radius where glyphs get shoved + brightened
+  base: 0.2,                 // alpha of ordinary (dim) glyphs
+  scroll: 1.1,               // rows per second, text drifts UP continuously
+  push: 0.3, wake: 0.06,     // static shove (cells, tiny: letters stay on their rows at rest) / shove along pupil velocity (the real "moves the text away")
+  omegaGlyph: 14, omegaPupil: 12, reach: 0.55,
+  sparkRate: 0.05, sparkLife: 0.7,           // random glyph flares (per glyph per second / seconds)
+  blink: { min: 2.5, max: 6.5, close: .09, hold: .05, open: .14, dbl: .12 },
+  snap: false,               // true = pupil moves in whole-cell steps (unverified in the reference)
+};
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+// Exact critically damped spring: frame-rate independent, safe to retarget at any time.
+function spring(x, v, target, w, dt) {
+  const e = Math.exp(-w * dt), d = x - target, k = (v + w * d) * dt;
+  return [target + (d + k) * e, (v - w * k) * e];
+}
+
+/* ---------------------------- pure logic (no DOM) --------------------------- */
+function createEyeCore(cfg = CFG) {
+  let W = cfg.refW, H = cfg.refW / 1.7, S = 1, frame = 0;
+  let text = '   ', n = 3, off = new Float32Array(6), vel = new Float32Array(6);
+  let spark = new Float32Array(3), seen = new Int32Array(3);
+  const st = { scroll: 0, open: 1, px: W / 2, py: H / 2, vx: 0, vy: 0, tx: W / 2, ty: H / 2,
+               b: { phase: 'idle', t: 0, next: 3, dbl: false } };
+  const glyphs = []; let count = 0;            // pooled output: {ch,x,y,a,bold}
+
+  const resize = (w, h) => { W = w; H = h; S = w / cfg.refW; };
+  const setTarget = (x, y) => { st.tx = x; st.ty = y; };
+  function setText(s) {                        // call on every page change
+    text = (String(s).replace(/\s+/g, ' ').trim() || '...') + '   ';   // newlines become spaces
+    n = text.length; off = new Float32Array(n * 2); vel = new Float32Array(n * 2);
+    spark = new Float32Array(n); seen = new Int32Array(n); st.scroll = 0;
+  }
+  const blink = () => { if (st.b.phase === 'idle') { st.b.phase = 'closing'; st.b.t = 0; } };
+
+  function updateBlink(dt, reduced) {
+    const B = cfg.blink, s = st.b; s.t += dt;
+    if (s.phase === 'idle') {
+      st.open = 1;
+      if (!reduced && s.t >= s.next) { s.phase = 'closing'; s.t = 0; s.dbl = Math.random() < B.dbl; }
+    } else if (s.phase === 'closing') {
+      const k = clamp(s.t / B.close, 0, 1); st.open = 1 - k * k;
+      if (k >= 1) { s.phase = 'hold'; s.t = 0; }
+    } else if (s.phase === 'hold') {
+      st.open = 0; if (s.t >= B.hold) { s.phase = 'opening'; s.t = 0; }
+    } else {
+      const k = clamp(s.t / B.open, 0, 1); st.open = k * (2 - k);          // ease-out
+      if (k >= 1) { s.phase = 'idle'; s.t = 0; st.open = 1;
+        s.next = s.dbl ? 0.18 : B.min + Math.random() * (B.max - B.min); s.dbl = false; }
+    }
+  }
+
+  // lid curves: returns [upperY, lowerY, h] at u in [-1,1]. Pointed corners; blink drops the upper lid onto the lower one.
+  const lidAt = u => { const cy = H / 2, h = Math.sqrt(Math.max(0, 1 - u * u));
+    return [cy - h * (cfg.ryU * S * st.open - cfg.ryL * S * (1 - st.open)), cy + h * cfg.ryL * S, h]; };
+  function update(dt, reduced = false) {
+    dt = Math.min(dt, 0.05); frame++;
+    const cx = W / 2, cy = H / 2, rx = cfg.rx * S, ry0 = cfg.ry * S;
+    updateBlink(dt, reduced);
+    const ry = Math.max(1e-3, ry0 * st.open);          // blink = the ellipse closes vertically
+
+    // 1) pupil: gaze direction -> a point inside the eye, critically damped spring
+    let ux = (st.tx - cx) / (rx * 1.6), uy = (st.ty - cy) / (ry0 * 1.6);
+    const ul = Math.hypot(ux, uy); if (ul > 1) { ux /= ul; uy /= ul; }
+    let gx = cx + ux * rx * cfg.reach, gy = cy + uy * ry0 * cfg.reach;
+    if (cfg.snap) { const cw = cfg.cellW * S, ch = cfg.cellH * S; gx = cx + Math.round((gx - cx) / cw) * cw; gy = cy + Math.round((gy - cy) / ch) * ch; }
+    let q = spring(st.px, st.vx, gx, cfg.omegaPupil, dt); st.px = q[0]; st.vx = q[1];
+    q = spring(st.py, st.vy, gy, cfg.omegaPupil, dt); st.py = q[0]; st.vy = q[1];
+
+    // 2) the text drifts upward forever
+    if (!reduced) st.scroll += cfg.scroll * dt;
+    const cw = cfg.cellW * S, ch = cfg.cellH * S, rHole = cfg.hole * cw, rInfl = cfg.infl * cw;
+    const rows = Math.ceil(2 * cfg.ryU * S / ch) + 5, base = Math.floor(st.scroll), frac = st.scroll - base;
+
+    // 3) lay out the grid, keep only glyphs whose CENTER is inside the ellipse (hard, character-level mask)
+    count = 0;
+    for (let r = 0; r < rows; r++) {
+      const y = cy + (r - (rows - 1) / 2 - frac) * ch;
+      const row = base + r;
+      for (let c = 0; c < cfg.cols; c++) {
+        const x = cx + (c - (cfg.cols - 1) / 2) * cw, u = (x - cx) / rx;
+        if (Math.abs(u) >= 1) continue;
+        const lw = lidAt(u), dTop = y - lw[0], dBot = lw[1] - y, dEdge = Math.min(dTop, dBot);
+        if (dEdge <= 0) continue;
+        // the upper lid is text only: while blinking, the glyphs on its edge turn bold + bright
+        const role = (st.open < .999 && dTop < ch * .7) ? 1 : 0;
+        const idx = (((row * cfg.cols + c) % n) + n) % n, chr = text[idx];
+        if (chr === ' ') continue;
+        const i2 = idx * 2;
+        if (seen[idx] < frame - 1) { off[i2] = off[i2 + 1] = vel[i2] = vel[i2 + 1] = 0; }   // stale state after being off-screen
+        seen[idx] = frame;
+
+        // 4) pupil repels: glyphs inside rInfl are shoved away (stronger near the pupil, plus a wake along its motion)
+        const dx = x - st.px, dy = y - st.py, dist = Math.hypot(dx, dy) || 1e-3;
+        let tx = 0, ty = 0;
+        if (dist < rInfl) { const f = 1 - dist / rInfl, k = cfg.push * ch * f * f;
+          tx = dx / dist * k + st.vx * cfg.wake * f; ty = dy / dist * k + st.vy * cfg.wake * f; }
+        q = spring(off[i2], vel[i2], tx, cfg.omegaGlyph, dt); off[i2] = q[0]; vel[i2] = q[1];
+        q = spring(off[i2 + 1], vel[i2 + 1], ty, cfg.omegaGlyph, dt); off[i2 + 1] = q[0]; vel[i2 + 1] = q[1];
+
+        // 5) brightness: bold + bright near the pupil, INVISIBLE inside the cleared zone (do not pile glyphs on its rim)
+        let lit = dist >= rHole ? 1 - clamp((dist - rHole) / (rInfl - rHole), 0, 1) : 1;
+        const vis = smooth(0.55 * rHole, rHole, dist);
+        // 6) random sparkle: a few glyphs anywhere flare for ~0.7 s
+        if (!reduced) {
+          if (spark[idx] > 0) { spark[idx] -= dt; lit = Math.max(lit, clamp(spark[idx] / cfg.sparkLife, 0, 1)); }
+          else if (Math.random() < cfg.sparkRate * dt) spark[idx] = cfg.sparkLife;
+        }
+        const edge = dEdge > 0 ? clamp(dEdge / (ch * .35), 0, 1) : 1;       // short fade at the ellipse rim so glyphs don't pop while scrolling
+        let a = (cfg.base + (1 - cfg.base) * lit) * vis * edge;
+        if (role) a = Math.max(a, .9 * clamp((1 - st.open) * 5, 0, 1) * vis * edge);
+        if (a < 0.01) continue;
+        const g = glyphs[count] || (glyphs[count] = {});
+        g.ch = chr; g.x = x + off[i2]; g.y = y + off[i2 + 1]; g.a = a; g.role = role; g.bold = lit > 0.55 || role === 1; count++;
+      }
+    }
+  }
+  return { cfg, st, glyphs, lid: lidAt, get count() { return count; }, resize, setTarget, setText, update, blink };
+}
+
+/* -------------------------- canvas + DOM glue ------------------------------- */
+function createEye(host, overlay, sample) {
+  const core = createEyeCore(), cv = document.createElement('canvas'); host.appendChild(cv);
+  const ctx = cv.getContext('2d'), octx = overlay.getContext('2d');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const debug = /[?&]debug/.test(location.search);
+  let w = 0, h = 0, dpr = 1, last = performance.now(), lastMove = -1e9, pointer = { x: 0, y: 0 }, ink = '#d8d4b4', acc = '#689e80', raf = 0;
+  const recolor = () => { ink = getComputedStyle(document.body).getPropertyValue('--ink').trim() || ink;
+    acc = getComputedStyle(document.body).getPropertyValue('--accent').trim() || acc; };
+  function fit() {
+    const r = host.getBoundingClientRect(); w = r.width; h = r.height; dpr = Math.min(devicePixelRatio || 1, 2);
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); core.resize(w, h);
+    overlay.width = innerWidth * dpr; overlay.height = innerHeight * dpr;
+  }
+  const ro = new ResizeObserver(fit); ro.observe(host); addEventListener('resize', fit);
+  function onMove(e) {
+    if (!e.isTrusted) return;
+    const r = host.getBoundingClientRect(); core.setTarget(e.clientX - r.left, e.clientY - r.top);
+    pointer = { x: e.clientX, y: e.clientY }; lastMove = performance.now();
+  }
+  addEventListener('pointermove', onMove, { passive: true });
+  addEventListener('keydown', e => { if (e.key === 'b' || e.key === 'B') core.blink(); });
+
+  function draw(now) {
+    const S = w / CFG.refW, fs = CFG.font * S;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = ink;
+    const FAM = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace', N = `400 ${fs}px ${FAM}`, B = `700 ${fs}px ${FAM}`;
+    let cur = '', curC = ink;
+    for (let i = 0; i < core.count; i++) {
+      const g = core.glyphs[i], f = g.bold ? B : N;
+      if (f !== cur) { ctx.font = f; cur = f; }
+      const c = ink; if (c !== curC) { ctx.fillStyle = c; curC = c; }
+      ctx.globalAlpha = g.a; ctx.fillText(g.ch, g.x, g.y);
+    }
+    // the pupil: a 1px square reticle (fades out while the eye is closed)
+    const s = CFG.pupil * S, { px, py, open } = { px: core.st.px, py: core.st.py, open: core.st.open };
+    ctx.globalAlpha = 0.7 * smooth(0.2, 0.7, open); ctx.strokeStyle = ink; ctx.lineWidth = 1;
+    ctx.strokeRect(Math.round(px - s / 2) + .5, Math.round(py - s / 2) + .5, Math.round(s), Math.round(s));
+    if (debug) {                                // tuning aid: ellipse, clear zone, influence radius
+      ctx.globalAlpha = .35; ctx.setLineDash([3, 3]); ctx.beginPath();
+      ctx.rect(w / 2 - CFG.rx * S, h / 2 - CFG.ryU * S, 2 * CFG.rx * S, (CFG.ryU + CFG.ryL) * S); ctx.stroke();
+      for (const r of [CFG.hole, CFG.infl]) { ctx.beginPath(); ctx.arc(px, py, r * CFG.cellW * S, 0, 7); ctx.stroke(); }
+      ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = 1;
+    // tracking line on the shared full-viewport overlay: pupil -> pointer, fades 1.2s after the last move
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0); octx.clearRect(0, 0, innerWidth, innerHeight);
+    const age = now - lastMove, vis = age < 1200 ? 1 - smooth(900, 1200, age) : 0;
+    if (vis > 0.01 && !reduced) {
+      const r = host.getBoundingClientRect(), x0 = r.left + px, y0 = r.top + py;
+      octx.strokeStyle = ink;
+      octx.globalAlpha = 0.55 * vis; octx.lineWidth = 1; octx.setLineDash([5, 4]); octx.lineDashOffset = -(now / 40) % 9;
+      const bw = CFG.pupil * S, bh = bw * .63, dx = x0 - pointer.x, dy = y0 - pointer.y;
+      const t = Math.min(bw / 2 / (Math.abs(dx) || 1e-6), bh / 2 / (Math.abs(dy) || 1e-6), 1);
+      if (t < 1) { octx.beginPath(); octx.moveTo(x0, y0); octx.lineTo(pointer.x + dx * t, pointer.y + dy * t); octx.stroke(); }
+      octx.setLineDash([]);
+      octx.strokeRect(Math.round(pointer.x - bw / 2) + .5, Math.round(pointer.y - bh / 2) + .5, Math.round(bw), Math.round(bh)); octx.globalAlpha = 1;
+    }
+  }
+  function loop(now) {
+    const dt = (now - last) / 1000; last = now;
+    if (!document.hidden) { core.update(dt, reduced); draw(now); }
+    raf = requestAnimationFrame(loop);
+  }
+  core.setText(sample); recolor(); fit(); raf = requestAnimationFrame(loop);
+  return { core, recolor, setText: core.setText, blink: core.blink,
+           destroy() { cancelAnimationFrame(raf); ro.disconnect(); removeEventListener('pointermove', onMove); cv.remove(); } };
+}
+
+const SAMPLE = `- [Realtime dashboard](docs/projects/realtime-dashboard.md) - [Cloud architecture notes](docs/cloud/architecture-overview.md)
+- [Review current deployment readiness](docs/ops/deploy-readiness.md) - [Browse all documentation](docs/README.md)
+- [Image pipeline](https://example.com/image-pipeline) - [Infrastructure as code](docs/cloud/terraform-modules.md)`;
+window.__eye = createEye(document.getElementById('eye'), document.getElementById('overlay'), SAMPLE);
+</script>
+</body>
+</html>

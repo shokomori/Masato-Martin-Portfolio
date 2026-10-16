@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hands desk: reference implementation</title>
+<style>
+  :root{--bg:#0c0c0c;--ink:#d8d4b4}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:12px "IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+  body{display:grid;place-items:center}
+  canvas{display:block}
+  .hint{position:fixed;left:12px;bottom:10px;opacity:.5}
+</style></head><body>
+<canvas id="c" aria-hidden="true"></canvas>
+<div class="hint">move the pointer (right hand grabs the mouse) · click: left / middle / right · type, or wait: both hands type and the right hand leaves the mouse</div>
+<script type="module">
+/* =============================================================================
+   MEASURED FROM THE REFERENCE (1036x310 screenshot; K = key pitch = 36.6px = 0.03533 * width)
+   - Hands are MediaPipe-style 21-landmark skeletons: 1px bones, SQUARE joint markers (0.137K).
+     Bones: wrist->index MCP, wrist->pinky MCP, MCP row (pinky-ring-middle-index), 3 bones per finger,
+     thumb chain wrist->1->2->3->4. Landmark coordinates below are in K, relative to the wrist.
+   - Left hand rests with all 4 fingertips exactly on a s d f; thumb tip on the left end of the space line.
+   - Box = bbox of the 21 landmarks + 0.3K padding (it does NOT include the mouse). 1px.
+   - Labels: ['hand0:u'] 0.4064323 (left-aligned to box left, 0.38K above box top); hand1 label RIGHT-aligned
+     to its box; mouse label to the right of hand1's box top, 2 lines (two independent scores).
+   - Mouse: capsule 1.59K x 2.62K, split at 40% height, centre line above the split, scroll-wheel bar.
+   - Alphas over the ink colour: keys .18, space line .26, bones .30, box .19, labels .65, mouse .50, markers .85.
+   - Keyboard: glyph labels only (esc ` 1..0 - = ←, q..\, a..' ↵, ↑ z..m , . / ↑), space bar = 5.5K line under 'b'.
+   GUESSES (not visible in a still): the ':d' tag while a finger presses, the idle-mouse label, all motion/timings.
+   ========================================================================== */
+const TL=[[0,0],[1.189,-.71],[1.291,-1.093],[1.387,-1.619],[1.434,-2.104],[.765,-2.766],[.915,-3.484],[1.004,-4.023],[1.059,-4.447],[-.041,-2.678],[-.007,-3.395],[.041,-3.969],[.055,-4.447],[-.861,-2.678],[-.902,-3.395],[-.908,-3.969],[-.956,-4.447],[-1.673,-2.766],[-1.769,-3.484],[-1.858,-4.023],[-1.954,-4.447]];
+const TR=TL.map(([x,y])=>[-x,y]);                       // right hand on the keys = mirror of the left
+const TM=[[0,0],[-.866,-.91],[-1.156,-1.62],[-1.238,-2.249],[-1.194,-2.768],[-.484,-2.194],[-.473,-2.814],[-.484,-3.287],[-.473,-3.724],[-.055,-2.249],[.036,-2.858],[.09,-3.35],[.145,-3.724],[.336,-2.049],[.484,-2.421],[.574,-2.713],[.683,-2.904],[.574,-1.683],[.71,-1.948],[.82,-2.139],[.921,-2.284]]; // right hand gripping the mouse
+const BONES=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const FB=[1,5,9,13,17];                                  // first landmark of thumb/index/middle/ring/pinky
+const ROWS=[['`','1','2','3','4','5','6','7','8','9','0','-','='],['q','w','e','r','t','y','u','i','o','p','[',']','\\'],['a','s','d','f','g','h','j','k','l',';',"'"],['z','x','c','v','b','n','m',',','.','/']];
+const START=[2.69,4.19,4.48,4.99];                       // K from the left: centre of ` q a z
+const FMAP={}, add=(h,f,l)=>l.split(' ').forEach(k=>FMAP[k]=[h,f]);
+add('L',4,'` 1 q a z esc sL');add('L',3,'2 w s x');add('L',2,'3 e d c');add('L',1,'4 5 r t f g v b');
+add('R',1,'6 7 y u h j n m');add('R',2,'8 i k ,');add('R',3,'9 o l .');add('R',4,"0 - = ← p [ ] \\ ; ' ↵ / sR");add('R',0,'space');
+const SHIFTED={':':';','"':"'",'<':',','>':'.','?':'/','_':'-','+':'=','{':'[','}':']','|':'\\','~':'`'};
+
+const CFG={grabPx:24,grabWinMs:200,keyQuietMs:500,typingHoldMs:400,mouseIdleMs:1200,cooldownMs:400,
+  wristOmega:10,reachOmega:26,mouseOmega:16,poseOmega:12,boxOmega:18,strikeMs:240,typeMs:85,confHz:12};
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v)),lerp=(a,b,t)=>a+(b-a)*t;
+function spring(x,v,t,w,dt){const e=Math.exp(-w*dt),d=x-t,k=(v+w*d)*dt;return[t+(d+k)*e,(v-w*k)*e]}   // exact critically damped
+
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches,debug=/[?&]debug/.test(location.search);
+const FAM='"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace';
+let K=36.6,Wd=1036,Hd=310,dpr=1,keys={},lit={},ink='#d8d4b4',pend=[],nextFlush=0;
+let rState='KEYS',lastKeyAt=-1e9,lastMoveAt=-1e9,lastSwitch=0,auto=false,acc=0,winStart=0,lx=NaN,ly=NaN,ptr={x:0,y:0},confT=0;
+const mouse={x:0,y:0,vx:0,vy:0,conf:[.34,.78]};
+const cl=[0,0,0],held=[0,0,0],ripples=[];   // click flash per button: 0 left, 1 middle, 2 right
+const newHand=side=>({side,o:{x:0,y:0},v:{x:0,y:0},ot:{x:0,y:0},rt:Array.from({length:5},()=>({x:0,y:0})),rr:Array.from({length:5},()=>({x:0,y:0,vx:0,vy:0})),
+  press:[0,0,0,0,0],relax:0,m:0,mv:0,p:Array.from({length:21},()=>({x:0,y:0})),bx:null,conf:.4+Math.random()*.4});
+const L=newHand('L'),R=newHand('R');
+
+function layoutKeys(){
+  keys={};const y=r=>(.9+r*1.195)*K;
+  ROWS.forEach((row,r)=>row.forEach((k,i)=>keys[k]={x:(START[r]+i)*K,y:y(r),g:k}));
+  const P=l=>keys[l];
+  keys.esc={x:P('`').x-1.15*K,y:y(0),g:'esc'};keys['←']={x:P('=').x+1.6*K,y:y(0),g:'←'};keys['↵']={x:P("'").x+1.5*K,y:y(2),g:'↵'};
+  keys.sL={x:P('z').x-1.9*K,y:y(3),g:'↑'};keys.sR={x:P('/').x+1.5*K,y:y(3),g:'↑'};keys.space={x:P('b').x,y:y(4),g:''};
+}
+function fit(){
+  dpr=Math.min(devicePixelRatio||1,2);Wd=Math.min(innerWidth,1036);K=Wd*.03533;Hd=8.47*K;
+  cv.width=Math.round(Wd*dpr);cv.height=Math.round(Hd*dpr);cv.style.width=Wd+'px';cv.style.height=Hd+'px';
+  layoutKeys();mouse.x=20.79*K;mouse.y=3.52*K;L.bx=R.bx=null;
+  ink=getComputedStyle(document.body).getPropertyValue('--ink').trim()||ink;
+}
+const wristKeys=h=>h.side==='L'?{x:keys.d.x-.04*K,y:7.87*K}:{x:keys.k.x+.055*K,y:7.87*K};
+
+/* ------------------------------ striking keys ------------------------------ */
+function strike(label,now){
+  const m=FMAP[label];if(!m)return;const h=m[0]==='L'?L:R,f=m[1],k=keys[label];
+  const T=h.side==='L'?TL:TR,w=wristKeys(h),ti=f===0?4:FB[f]+3;
+  let dx=k.x-(w.x+T[ti][0]*K),dy=k.y-(w.y+T[ti][1]*K);if(f===0){dx=0;dy=0}
+  h.ot.x=clamp(dx*.7,-1.3*K,1.3*K);h.ot.y=clamp(dy*.7,-K,K);                 // wrist drifts toward the key (70%)
+  if(f>0){h.rt[f].x=dx*.3;h.rt[f].y=dy*.3}                                      // the finger itself reaches the rest (30%)
+  h.press[f]=1;h.relax=now+CFG.strikeMs;lit[label]=1;
+}
+function route(label,now){                                                      // typing beats the mouse
+  const m=FMAP[label];if(!m)return;
+  if(m[0]==='R'&&(rState!=='KEYS'||R.m>.35)){pend.push(label);if(rState==='MOUSE'||rState==='TO_MOUSE')enter('TO_KEYS',now)}
+  else strike(label,now);
+}
+function enter(s,now){rState=s;lastSwitch=now}
+function press(c,now){
+  lastKeyAt=now;let ks;
+  if(c==='\n')ks=['↵'];else if(c===' ')ks=['space'];else if(SHIFTED[c])ks=[SHIFTED[c],'S'];
+  else if(c>='A'&&c<='Z')ks=[c.toLowerCase(),'S'];else ks=[c];
+  if(!FMAP[ks[0]])return;route(ks[0],now);
+  if(ks[1])route(FMAP[ks[0]][0]==='L'?'sR':'sL',now);                           // shift on the opposite hand
+}
+function typeStr(s){
+  auto=true;[...s].forEach((c,i)=>setTimeout(()=>press(c,performance.now()),i*CFG.typeMs));
+  setTimeout(()=>{auto=false},s.length*CFG.typeMs+CFG.typingHoldMs);
+}
+addEventListener('keydown',e=>{
+  if(e.repeat)return;const now=performance.now();
+  if(e.key==='Enter')press('\n',now);else if(e.key==='Backspace'){lastKeyAt=now;route('←',now)}
+  else if(e.key==='Escape'){lastKeyAt=now;route('esc',now)}
+  else if(e.key==='Shift'){lastKeyAt=now;route(e.code==='ShiftLeft'?'sL':'sR',now)}
+  else if(e.key.length===1)press(e.key,now);
+});
+const BI={0:0,1:1,2:2};
+addEventListener('pointerdown',e=>{
+  if(!e.isTrusted||!(e.button in BI))return;const b=BI[e.button],now=performance.now();
+  held[b]=1;cl[b]=1;ripples.push({b,t:now});mouse.conf[0]=.97;
+  lastMoveAt=now;winStart=now;acc=CFG.grabPx;                                    // clicking also makes the right hand grab the mouse
+});
+const rel=e=>{if(e.button in BI)held[BI[e.button]]=0};
+addEventListener('pointerup',rel);addEventListener('pointercancel',()=>held.fill(0));addEventListener('blur',()=>held.fill(0));
+addEventListener('contextmenu',e=>e.preventDefault());
+addEventListener('pointermove',e=>{                                             // filtered: ignores scroll/layout-induced + synthetic moves
+  if(!e.isTrusted)return;const d=Math.hypot(e.clientX-lx,e.clientY-ly);lx=e.clientX;ly=e.clientY;if(!(d>=2))return;
+  const now=performance.now();if(now-winStart>CFG.grabWinMs){winStart=now;acc=0}
+  acc+=d;lastMoveAt=now;ptr={x:e.clientX,y:e.clientY};
+},{passive:true});
+
+/* ------------------------------ per-frame update ------------------------------ */
+function updateState(now){
+  const typing=auto||now-lastKeyAt<CFG.typingHoldMs,burst=acc>=CFG.grabPx&&now-winStart<=CFG.grabWinMs;
+  if(rState==='KEYS'){if(!typing&&now-lastKeyAt>CFG.keyQuietMs&&burst&&now-lastSwitch>CFG.cooldownMs)enter('TO_MOUSE',now)}
+  else if(rState==='TO_MOUSE'){if(typing)enter('TO_KEYS',now);else if(R.m>.94)enter('MOUSE',now)}
+  else if(rState==='MOUSE'){if(typing||now-lastMoveAt>CFG.mouseIdleMs)enter('TO_KEYS',now)}
+  else if(R.m<.06)enter('KEYS',now);
+}
+function place(h,dt,now,breath){
+  if(now>h.relax){h.ot.x=h.ot.y=0;h.rt.forEach(r=>{r.x=r.y=0})}
+  let q=spring(h.o.x,h.v.x,h.ot.x,CFG.wristOmega,dt);h.o.x=q[0];h.v.x=q[1];
+  q=spring(h.o.y,h.v.y,h.ot.y,CFG.wristOmega,dt);h.o.y=q[0];h.v.y=q[1];
+  for(let f=1;f<5;f++){const r=h.rr[f],t=h.rt[f];
+    q=spring(r.x,r.vx,t.x,CFG.reachOmega,dt);r.x=q[0];r.vx=q[1];q=spring(r.y,r.vy,t.y,CFG.reachOmega,dt);r.y=q[0];r.vy=q[1]}
+  for(let f=0;f<5;f++)h.press[f]=Math.max(0,h.press[f]-dt*7);
+  const mm=h.side==='R'?h.m:0,A=h.side==='L'?TL:TR,wk=wristKeys(h),wm={x:mouse.x+.14*K,y:mouse.y+2.72*K};
+  const wx=lerp(wk.x+h.o.x,wm.x,mm),wy=lerp(wk.y+h.o.y+breath,wm.y,mm);
+  for(let i=0;i<21;i++){const a=A[i],b=h.side==='R'?TM[i]:a;h.p[i].x=wx+lerp(a[0],b[0],mm)*K;h.p[i].y=wy+lerp(a[1],b[1],mm)*K}
+  const w=1-mm;
+  for(let f=1;f<5;f++){                                                         // reach + press dip, joints keep their natural bend
+    const b=FB[f],r=h.rr[f],mcp=h.p[b],tip=h.p[b+3];
+    const nm={x:mcp.x+r.x*.2*w,y:mcp.y+r.y*.2*w},nt={x:tip.x+r.x*w,y:tip.y+r.y*w};
+    const dx=nt.x-nm.x,dy=nt.y-nm.y,dl=Math.hypot(dx,dy)||1,pr=h.press[f]*.12*K*w;nt.x-=dx/dl*pr;nt.y-=dy/dl*pr;
+    [[b+1,.425],[b+2,.75]].forEach(([j,t])=>{const p=h.p[j];p.x=lerp(nm.x,nt.x,t)+(p.x-lerp(mcp.x,tip.x,t));p.y=lerp(nm.y,nt.y,t)+(p.y-lerp(mcp.y,tip.y,t))});
+    mcp.x=nm.x;mcp.y=nm.y;tip.x=nt.x;tip.y=nt.y;
+  }
+  for(let j=2;j<=4;j++)h.p[j].y-=h.press[0]*.07*K*w;                           // thumb dip on the space bar
+  if(h.side==='R'&&mm>0)[[1,cl[0]],[2,cl[2]]].forEach(([f,c])=>{                  // index = left click, middle finger = right click: fingertip presses down
+    const b=FB[f],d=c*.16*K*mm;[[b+1,.35],[b+2,.8],[b+3,1]].forEach(([j,wt])=>{h.p[j].y+=d*wt});
+  });
+  let l=1e9,t=1e9,r=-1e9,bt=-1e9;for(const p of h.p){l=Math.min(l,p.x);t=Math.min(t,p.y);r=Math.max(r,p.x);bt=Math.max(bt,p.y)}
+  const pad=.3*K,T=[l-pad,t-pad,r+pad,bt+pad];
+  if(!h.bx)h.bx={v:T.slice(),s:[0,0,0,0]};else for(let i=0;i<4;i++){q=spring(h.bx.v[i],h.bx.s[i],T[i],CFG.boxOmega,dt);h.bx.v[i]=q[0];h.bx.s[i]=q[1]}  // tracker box lags
+}
+function update(now,dt){
+  updateState(now);
+  const tgt=rState==='MOUSE'||rState==='TO_MOUSE'?1:0;let q=spring(R.m,R.mv,tgt,CFG.poseOmega,dt);R.m=clamp(q[0],0,1);R.mv=q[1];
+  if(rState==='MOUSE'){                                                          // mouse follows the pointer only while gripped
+    const tx=20.79*K+(ptr.x/innerWidth-.5)*5*K,ty=3.52*K+(ptr.y/innerHeight-.5)*1.2*K;
+    q=spring(mouse.x,mouse.vx,tx,CFG.mouseOmega,dt);mouse.x=q[0];mouse.vx=q[1];q=spring(mouse.y,mouse.vy,ty,CFG.mouseOmega,dt);mouse.y=q[0];mouse.vy=q[1];
+  }
+  if(pend.length&&rState==='KEYS'&&R.m<.35&&now>=nextFlush){strike(pend.shift(),now);nextFlush=now+45}
+  const breath=reduced?0:Math.sin(now/1000*Math.PI/2);
+  place(L,dt,now,breath);place(R,dt,now,breath);
+  for(const k in lit)lit[k]=Math.max(0,lit[k]-dt*6);
+  for(let b=0;b<3;b++)if(!held[b])cl[b]=Math.max(0,cl[b]-dt*7);
+  while(ripples.length&&now-ripples[0].t>450)ripples.shift();
+  confT+=dt;if(confT>1/CFG.confHz){confT=0;const nx=v=>clamp(v+(Math.random()-.5)*.07+(.62-v)*.03,.3,.97);L.conf=nx(L.conf);R.conf=nx(R.conf);mouse.conf=mouse.conf.map(nx)}
+}
+
+/* ---------------------------------- drawing ---------------------------------- */
+function drawHand(h){
+  ctx.strokeStyle=ink;ctx.fillStyle=ink;ctx.lineWidth=1;ctx.globalAlpha=.3;ctx.beginPath();
+  for(const[a,b]of BONES){ctx.moveTo(h.p[a].x,h.p[a].y);ctx.lineTo(h.p[b].x,h.p[b].y)}ctx.stroke();
+  ctx.globalAlpha=.85;const s=.137*K;for(const p of h.p)ctx.fillRect(p.x-s/2,p.y-s/2,s,s);       // SQUARE markers
+  const[l,t,r,b]=h.bx.v;ctx.globalAlpha=.19;ctx.strokeRect(Math.round(l)+.5,Math.round(t)+.5,Math.round(r-l),Math.round(b-t));
+}
+function drawMouse(){
+  const w=1.59*K,h=2.62*K,x=mouse.x-w/2,y=mouse.y-h/2,r=w/2,sy=y+.4*h,now=performance.now();
+  const cap=new Path2D();cap.moveTo(x,y+r);cap.arc(mouse.x,y+r,r,Math.PI,0);cap.lineTo(x+w,y+h-r);cap.arc(mouse.x,y+h-r,r,0,Math.PI);cap.closePath();
+  ctx.strokeStyle=ink;ctx.fillStyle=ink;
+  ctx.save();ctx.clip(cap);                                                      // pressed buttons fill in
+  ctx.globalAlpha=.38*cl[0];ctx.fillRect(x,y,w/2,sy-y);
+  ctx.globalAlpha=.38*cl[2];ctx.fillRect(mouse.x,y,w/2,sy-y);
+  ctx.restore();
+  ctx.globalAlpha=.5+.4*Math.max(cl[0],cl[2]);ctx.lineWidth=1;ctx.stroke(cap);
+  ctx.globalAlpha=.5;ctx.beginPath();ctx.moveTo(x,sy);ctx.lineTo(x+w,sy);ctx.moveTo(mouse.x,y);ctx.lineTo(mouse.x,sy);ctx.stroke();
+  const ww=.09*K*(1+2*cl[1]),wh=.35*K*(1+.6*cl[1]);ctx.globalAlpha=.5+.45*cl[1];    // wheel clicks: bar thickens and brightens
+  ctx.fillRect(mouse.x-ww/2,y+.13*h,ww,wh);
+  for(const rp of ripples){                                                       // expanding square ripple from the pressed button
+    const k=(now-rp.t)/450,s=(.35+1.6*k)*K,cx=rp.b===0?x+w*.25:rp.b===2?x+w*.75:mouse.x,cy=y+.2*h;
+    ctx.globalAlpha=.55*(1-k)*(1-k);ctx.strokeRect(Math.round(cx-s/2)+.5,Math.round(cy-s/2)+.5,Math.round(s),Math.round(s));
+  }
+  ctx.globalAlpha=1;
+}
+function draw(){
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,Wd,Hd);ctx.textBaseline='middle';ctx.fillStyle=ink;
+  ctx.textAlign='center';ctx.font=`${.45*K}px ${FAM}`;
+  for(const k in keys){if(k==='space')continue;ctx.globalAlpha=.18+.7*(lit[k]||0);ctx.fillText(keys[k].g,keys[k].x,keys[k].y)}
+  const sp=keys.space;ctx.globalAlpha=.26+.5*(lit.space||0);ctx.strokeStyle=ink;ctx.beginPath();ctx.moveTo(sp.x-2.75*K,Math.round(sp.y)+.5);ctx.lineTo(sp.x+2.75*K,Math.round(sp.y)+.5);ctx.stroke();
+  drawMouse();drawHand(L);drawHand(R);
+  ctx.font=`${.38*K}px ${FAM}`;ctx.globalAlpha=.65;ctx.fillStyle=ink;
+  const tag=h=>h.press.some(p=>p>.3)?'d':'u',lb=L.bx.v,rb=R.bx.v;
+  ctx.textAlign='left';ctx.fillText(`['hand0:${tag(L)}'] ${L.conf.toFixed(7)}`,lb[0],lb[1]-.38*K);
+  ctx.textAlign='right';ctx.fillText(`['hand1:${tag(R)}'] ${R.conf.toFixed(7)}`,rb[2],rb[1]-.38*K);
+  ctx.textAlign='left';const mx=R.m>.5?rb[2]+2:mouse.x+.8*K+4,my=R.m>.5?rb[1]+.14*K:mouse.y-1.31*K+5;   // idle-mouse label placement is a guess
+  ctx.fillText(`['mouse:${held.some(Boolean)?'d':'u'}'] ${mouse.conf[0].toFixed(7)}`,mx,my);ctx.fillText(mouse.conf[1].toFixed(7),mx,my+.44*K);
+  if(debug){ctx.globalAlpha=.6;ctx.textAlign='left';ctx.fillText(`${rState} m=${R.m.toFixed(2)} pend=${pend.length} auto=${auto}`,8,Hd-10)}
+  ctx.globalAlpha=1;
+}
+let last=performance.now();
+function loop(now){const dt=Math.min((now-last)/1000,.05);last=now;if(!document.hidden){update(now,dt);draw()}requestAnimationFrame(loop)}
+fit();addEventListener('resize',fit);requestAnimationFrame(loop);
+if(!reduced){setTimeout(()=>typeStr(':colorscheme gold\n'),2500);setInterval(()=>typeStr(':e projects\n'),9000)}   // demo only: simulated typing
+</script></body></html>
