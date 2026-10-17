@@ -496,6 +496,7 @@ export class App implements AfterViewInit, OnDestroy {
   private wheelResizeObserver: ResizeObserver | null = null;
   private workspaceEffects: ReturnType<typeof createWorkspaceEffects> | null = null;
   private terminalTypingTimer: number | null = null;
+  private typingTargetFrame: number | null = null;
   private terminalTypingQueue: TerminalEntry[] = [];
   private terminalTypingCurrent: TerminalEntry | null = null;
   private terminalTypingPosition = 0;
@@ -567,6 +568,9 @@ export class App implements AfterViewInit, OnDestroy {
     this.wheelResizeObserver?.disconnect();
     if (this.terminalTypingTimer !== null) {
       window.clearTimeout(this.terminalTypingTimer);
+    }
+    if (this.typingTargetFrame !== null) {
+      window.cancelAnimationFrame(this.typingTargetFrame);
     }
     if (this.scriptedKeyTimer !== null) {
       window.clearTimeout(this.scriptedKeyTimer);
@@ -673,6 +677,7 @@ export class App implements AfterViewInit, OnDestroy {
 
   protected onWindowGeometryChange(): void {
     this.measureWheelGeometry();
+    this.scheduleTypingTargetUpdate();
     if (this.pointerTelemetry().tracked) {
       this.updatePointerTelemetry(this.pointerPosition.x, this.pointerPosition.y, this.pointerPosition.type);
     }
@@ -1247,10 +1252,35 @@ export class App implements AfterViewInit, OnDestroy {
     this.terminalInput.set(target.value);
     this.terminalHistoryIndex.set(null);
     this.terminalDraft = target.value;
+    this.updateTypingTarget();
   }
 
   protected focusTerminal(): void {
     this.focusMode.set('terminal');
+  }
+
+  protected onTerminalBlur(): void {
+    this.scheduleTypingTargetUpdate();
+  }
+
+  protected updateTypingTarget(): void {
+    const input = this.commandInput?.nativeElement;
+    if (input && document.activeElement === input && input.value.length > 0) {
+      const inputTarget = this.getCommandInputCaret(input);
+      if (inputTarget) {
+        this.workspaceEffects?.setTypingTarget(inputTarget);
+        return;
+      }
+    }
+
+    if (this.terminalTyping()) {
+      const outputTarget = this.getTerminalOutputCaret();
+      if (outputTarget) {
+        this.workspaceEffects?.setTypingTarget(outputTarget);
+        return;
+      }
+    }
+    this.workspaceEffects?.setTypingTarget(null);
   }
 
   protected focusWheel(): void {
@@ -1312,6 +1342,7 @@ export class App implements AfterViewInit, OnDestroy {
     this.terminalHistoryIndex.set(null);
     this.terminalInput.set('');
     this.terminalDraft = '';
+    this.scheduleTypingTargetUpdate();
     this.scrollTerminalToEnd();
   }
 
@@ -1701,6 +1732,7 @@ export class App implements AfterViewInit, OnDestroy {
         this.terminalTyping.set(false);
         this.workspaceEffects?.setAutoTyping(false);
         this.workspaceEffects?.setUpcoming('');
+        this.scheduleTypingTargetUpdate();
         this.terminalTypingTimer = null;
         this.scrollTerminalToEnd();
         return;
@@ -1713,6 +1745,7 @@ export class App implements AfterViewInit, OnDestroy {
           href: this.terminalTypingCurrent!.href,
         },
       ].slice(-100));
+      this.scheduleTypingTargetUpdate();
     }
 
     const entry = this.terminalTypingCurrent;
@@ -1742,6 +1775,7 @@ export class App implements AfterViewInit, OnDestroy {
       next[lastIndex] = { ...lastEntry, text: lastEntry.text + character };
       return next;
     });
+    this.scheduleTypingTargetUpdate();
     if (character === '\n' || this.terminalTypingPosition % 12 === 0) {
       this.scrollTerminalToEnd();
     }
@@ -1775,11 +1809,62 @@ export class App implements AfterViewInit, OnDestroy {
     this.terminalTyping.set(false);
     this.workspaceEffects?.setAutoTyping(false);
     this.workspaceEffects?.setUpcoming('');
+    this.scheduleTypingTargetUpdate();
     if (this.scriptedKeyTimer !== null) {
       window.clearTimeout(this.scriptedKeyTimer);
       this.scriptedKeyTimer = null;
     }
     this.scriptedKeyCode.set(null);
+  }
+
+  private scheduleTypingTargetUpdate(): void {
+    if (this.typingTargetFrame !== null) {
+      return;
+    }
+    this.typingTargetFrame = window.requestAnimationFrame(() => {
+      this.typingTargetFrame = null;
+      this.updateTypingTarget();
+    });
+  }
+
+  private getCommandInputCaret(input: HTMLInputElement): { x: number; y: number } | null {
+    const bounds = input.getBoundingClientRect();
+    const styles = window.getComputedStyle(input);
+    const caretIndex = input.selectionStart ?? input.value.length;
+    const textBeforeCaret = input.value.slice(0, caretIndex);
+    const fontSize = Number.parseFloat(styles.fontSize) || 12;
+    const letterSpacing = Number.parseFloat(styles.letterSpacing) || 0;
+    let textWidth = textBeforeCaret.length * fontSize * 0.6;
+    if (typeof window.CanvasRenderingContext2D !== 'undefined') {
+      const context = document.createElement('canvas').getContext('2d');
+      if (context) {
+        context.font = styles.font;
+        textWidth = context.measureText(textBeforeCaret).width;
+      }
+    }
+    textWidth += Math.max(0, textBeforeCaret.length - 1) * letterSpacing;
+
+    const left = bounds.left + input.clientLeft + (Number.parseFloat(styles.paddingLeft) || 0) - input.scrollLeft;
+    return {
+      x: Math.max(bounds.left, Math.min(bounds.right, left + textWidth)),
+      y: bounds.top + bounds.height / 2,
+    };
+  }
+
+  private getTerminalOutputCaret(): { x: number; y: number } | null {
+    const output = this.terminalOutput?.nativeElement;
+    const line = output?.lastElementChild;
+    if (!(line instanceof HTMLElement)) {
+      return null;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(line);
+    range.collapse(false);
+    const rangeBounds = typeof range.getBoundingClientRect === 'function' ? range.getBoundingClientRect() : null;
+    const bounds = rangeBounds && (rangeBounds.width > 0 || rangeBounds.height > 0)
+      ? rangeBounds
+      : line.getBoundingClientRect();
+    return { x: bounds.right, y: bounds.top + bounds.height / 2 };
   }
 
   private showScriptedKey(character: string): void {

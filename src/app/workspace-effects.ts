@@ -224,6 +224,7 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
   let overlaySize: Geometry = { width: 0, height: 0, dpr: 1 };
   let deskSize: Geometry = { width: 0, height: 0, dpr: 1 };
   let cursorPosition: Point | null = null;
+  let typingPosition: Point | null = null;
   let lastMoveAt = -Infinity;
   let lastKeyAt = -Infinity;
   let lastSwitchAt = -Infinity;
@@ -424,7 +425,8 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
     if (demoLine) demoLine.style.display = 'none';
     if (demoHint) demoHint.style.display = 'none';
     eyeDemo = demo;
-    if (cursorPosition) setEyeTarget(cursorPosition);
+    const target = typingPosition ?? cursorPosition;
+    if (target) setEyeTarget(target);
     requestFrame();
   }
 
@@ -437,6 +439,13 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
       point.x - frameBounds.left - innerBounds.left,
       point.y - frameBounds.top - innerBounds.top,
     );
+  }
+
+  function setTypingTarget(point: Point | null) {
+    typingPosition = point;
+    const target = typingPosition ?? cursorPosition;
+    if (target) setEyeTarget(target);
+    requestFrame();
   }
 
   function drawTrackingLine(timestamp: number) {
@@ -464,6 +473,15 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
     context.stroke();
     context.setLineDash([]);
     context.strokeRect(from.x - 5, from.y - 5, 10, 10);
+    if (typingPosition) {
+      context.strokeStyle = palette.accent;
+      context.globalAlpha = 0.72;
+      context.beginPath();
+      context.moveTo(typingPosition.x, typingPosition.y);
+      context.lineTo(to.x, to.y);
+      context.stroke();
+      context.strokeRect(typingPosition.x - 4, typingPosition.y - 4, 8, 8);
+    }
     context.beginPath();
     context.arc(to.x, to.y, 5, 0, Math.PI * 2);
     context.stroke();
@@ -1203,7 +1221,7 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
   function onPointerMove(event: PointerEvent) {
     const point = { x: event.clientX, y: event.clientY };
     cursorPosition = point;
-    setEyeTarget(point);
+    setEyeTarget(typingPosition ?? point);
     if (event.isTrusted) {
       const now = performance.now();
       if (lastPointer) {
@@ -1441,6 +1459,7 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
       upcomingText = text;
       requestFrame();
     },
+    setTypingTarget,
     destroy() {
       destroyed = true;
       if (frame) window.cancelAnimationFrame(frame);

@@ -713,7 +713,7 @@ html::-webkit-scrollbar {
 }
 
 .shot {
-  width: min(100%, 532px);
+  width: min(100%, 533px);
   margin: var(--cell-h) 0;
 }
 
@@ -2295,7 +2295,7 @@ html::-webkit-scrollbar {
   }
 
   .buffer {
-    padding: 8px 96px 12px 5px;
+    padding: 8px 0 12px 14px;
   }
 
   .eye-host {

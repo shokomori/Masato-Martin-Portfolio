@@ -497,6 +497,21 @@ describe('App workspace interactions', () => {
     fixture.destroy();
   });
 
+  it('echoes submitted commands as their own terminal lines', async () => {
+    const { fixture, element } = createWorkspace();
+    runCommand(element, 'whoami');
+    await waitForTerminalText(fixture, 'GitHub: shokomori');
+    fixture.detectChanges();
+
+    const commandLine = Array.from(element.querySelectorAll('.terminal-line.kind-command')).find(
+      (line) => normalizedText(line) === '› whoami',
+    );
+    expect(commandLine).toBeTruthy();
+    expect(commandLine?.nextElementSibling?.classList.contains('kind-output')).toBe(true);
+
+    fixture.destroy();
+  });
+
   it('opens the terminal command input with the colon shortcut from the workspace', () => {
     const { fixture, element } = createWorkspace();
     const input = element.querySelector<HTMLInputElement>('#workspace-command');
