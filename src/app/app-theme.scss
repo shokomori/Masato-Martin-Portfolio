@@ -200,9 +200,9 @@ input {
 .intro-mark {
   display: block;
   width: 44px;
-  height: 40px;
+  height: 44px;
   margin: 0 0 26px;
-  fill: currentColor;
+  object-fit: contain;
 }
 
 .portfolio-intro[data-stage='monogram'] .intro-mark {
@@ -358,10 +358,10 @@ input {
   font: 400 12px/13px 'Plex Mono', ui-monospace, monospace;
 }
 
-.brand svg {
-  width: calc(2 * var(--cell-w));
-  height: 12px;
-  fill: currentColor;
+.brand img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
 }
 
 .switch {

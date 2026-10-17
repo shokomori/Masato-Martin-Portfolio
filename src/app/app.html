@@ -4,10 +4,7 @@
       <button class="intro-skip" type="button" (click)="skipIntro()">skip intro <span>↵</span></button>
 
       <div class="intro-content">
-        <svg class="intro-mark" viewBox="0 0 88 80" aria-label="MM" role="img">
-          <path d="M0 12L12 0H16V32H29L38 23V43L33 48H16V80H0Z"></path>
-          <path d="M50 0H88V16H57L50 23V57L57 64H88L72 80H50L34 64V16Z"></path>
-        </svg>
+        <img class="intro-mark" src="masatomartinlogo.png" alt="Masato Martin logo" />
 
         @if (introStage() === 'boot' || introStage() === 'editor' || introStage() === 'typing' || introStage() === 'handoff') {
           <div class="intro-log" aria-live="polite">
@@ -44,10 +41,7 @@
   <canvas #trackingLine class="tracking-line" aria-hidden="true"></canvas>
   <header class="frame-top">
     <a class="brand" href="#top" aria-label="Masato Martin home">
-      <svg viewBox="0 0 88 80" aria-hidden="true">
-        <path d="M0 12L12 0H16V32H29L38 23V43L33 48H16V80H0Z"></path>
-        <path d="M50 0H88V16H57L50 23V57L57 64H88L72 80H50L34 64V16Z"></path>
-      </svg>
+      <img src="masatomartinlogo.png" alt="" />
       <span>Masato Martin</span>
     </a>
     <nav class="switch" aria-label="Elsewhere">
