@@ -11,6 +11,7 @@ import { NgOptimizedImage } from '@angular/common';
 import { createWorkspaceEffects } from './workspace-effects';
 
 type ThemeName = 'black' | 'violet' | 'green' | 'amber' | 'blue' | 'light';
+type ThemeOption = { name: ThemeName; swatch: string };
 type TerminalKind = 'command' | 'output' | 'error' | 'system';
 
 type TerminalEntry = {
@@ -98,6 +99,22 @@ function createKeyboardRow(
   }));
 }
 
+function springPosition(
+  position: number,
+  velocity: number,
+  target: number,
+  frequency: number,
+  deltaTime: number,
+): [number, number] {
+  const decay = Math.exp(-frequency * deltaTime);
+  const displacement = position - target;
+  const step = (velocity + frequency * displacement) * deltaTime;
+  return [
+    target + (displacement + step) * decay,
+    (velocity - frequency * step) * decay,
+  ];
+}
+
 @Component({
   selector: 'app-root',
   imports: [NgOptimizedImage],
@@ -121,6 +138,14 @@ function createKeyboardRow(
 })
 export class App implements AfterViewInit, OnDestroy {
   protected readonly themeNames: ThemeName[] = ['black', 'violet', 'green', 'amber', 'blue', 'light'];
+  protected readonly themeOptions: ThemeOption[] = [
+    { name: 'black', swatch: '#7dffb2' },
+    { name: 'violet', swatch: '#b06cff' },
+    { name: 'green', swatch: '#5be8a0' },
+    { name: 'amber', swatch: '#ffb65d' },
+    { name: 'blue', swatch: '#5ec9ff' },
+    { name: 'light', swatch: '#5d47de' },
+  ];
   protected readonly activeTheme = signal<ThemeName>('black');
   protected readonly introStage = signal<IntroStage>('complete');
   protected readonly introTypedLength = signal(0);
@@ -525,6 +550,12 @@ export class App implements AfterViewInit, OnDestroy {
   private suppressNextWheelClick = false;
   private lightboxReturnFocus: HTMLElement | null = null;
   private cvReturnFocus: HTMLElement | null = null;
+  private wheelAnimationFrame = 0;
+  private wheelTargetPosition = 0;
+  private wheelPosition = 0;
+  private wheelVelocity = 0;
+  private wheelLastFrame = 0;
+  private wheelAnimationEnabled = false;
 
   constructor() {
     this.applyTheme(this.resolveStoredTheme());
@@ -534,6 +565,13 @@ export class App implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     this.measureWheelGeometry();
+    const wheelCanvas = this.wheelInk?.nativeElement;
+    this.wheelAnimationEnabled = !this.prefersReducedMotion() &&
+      typeof CanvasRenderingContext2D !== 'undefined' &&
+      Boolean(wheelCanvas?.getContext('2d'));
+    if (this.wheelAnimationEnabled) {
+      this.wheelAnimationFrame = window.requestAnimationFrame(this.animateWheelInk);
+    }
     const overlay = this.trackingLine?.nativeElement;
     const eyeFrame = this.eyeFrame?.nativeElement;
     const handsFrame = this.handsFrame?.nativeElement;
@@ -564,6 +602,9 @@ export class App implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.wheelAnimationFrame !== 0) {
+      window.cancelAnimationFrame(this.wheelAnimationFrame);
+    }
     this.workspaceEffects?.destroy();
     this.wheelResizeObserver?.disconnect();
     if (this.terminalTypingTimer !== null) {
@@ -827,12 +868,12 @@ export class App implements AfterViewInit, OnDestroy {
 
   protected getRelativeProjectOffset(index: number): number {
     const length = this.projectData.length;
-    const offset = (index - this.selectedProjectIndex() + length) % length;
-    return offset > length / 2 ? offset - length : offset;
+    const offset = (((index - this.wheelPosition) % length) + length * 1.5) % length - length / 2;
+    return offset;
   }
 
   protected getProjectZIndex(index: number): number {
-    return 100 - 8 * Math.abs(this.getRelativeProjectOffset(index));
+    return Math.round(100 - 8 * Math.abs(this.getRelativeProjectOffset(index)));
   }
 
   protected isKeyActive(code: string): boolean {
@@ -877,14 +918,17 @@ export class App implements AfterViewInit, OnDestroy {
     const angle = offset * layout.angleStep;
     const x = layout.baseX + layout.radius * (1 - Math.cos(angle));
     const y = layout.height / 2 + layout.radius * Math.sin(angle) - layout.cardHeight / 2;
-    const scale = offset === 0 ? WHEEL_CONFIG.selectedScale : WHEEL_CONFIG.otherScale;
+    const scale = Math.max(
+      WHEEL_CONFIG.otherScale,
+      WHEEL_CONFIG.selectedScale - Math.abs(offset) * (WHEEL_CONFIG.selectedScale - WHEEL_CONFIG.otherScale),
+    );
     const rotation = -angle / 2;
     return `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${rotation.toFixed(4)}rad) scale(${scale})`;
   }
 
   protected getProjectShade(index: number): string {
     const distance = Math.abs(this.getRelativeProjectOffset(index));
-    return distance === 0 ? '0' : String(WHEEL_CONFIG.shade + WHEEL_CONFIG.shadeStep * distance);
+    return String((WHEEL_CONFIG.shade + WHEEL_CONFIG.shadeStep * distance) * (1 - Math.exp(-distance * 4)));
   }
 
   protected getProjectVisibility(index: number): 'visible' | 'hidden' {
@@ -898,7 +942,10 @@ export class App implements AfterViewInit, OnDestroy {
       return 'hidden';
     }
     const angle = offset * layout.angleStep;
-    const scale = offset === 0 ? WHEEL_CONFIG.selectedScale : WHEEL_CONFIG.otherScale;
+    const scale = Math.max(
+      WHEEL_CONFIG.otherScale,
+      WHEEL_CONFIG.selectedScale - Math.abs(offset) * (WHEEL_CONFIG.selectedScale - WHEEL_CONFIG.otherScale),
+    );
     const rotatedHalfHeight =
       (Math.abs(layout.cardWidth * Math.sin(angle / 2)) +
         Math.abs(layout.cardHeight * Math.cos(angle / 2))) *
@@ -959,8 +1006,18 @@ export class App implements AfterViewInit, OnDestroy {
       return;
     }
     const nextIndex = (index + this.projectData.length) % this.projectData.length;
+    const previousIndex = this.selectedProjectIndex();
+    const step = ((nextIndex - previousIndex + this.projectData.length * 1.5) % this.projectData.length)
+      - this.projectData.length / 2;
+    this.wheelTargetPosition += step;
     const project = this.projectData[nextIndex];
     this.selectedProjectIndex.set(nextIndex);
+    if (!this.wheelAnimationEnabled || this.prefersReducedMotion()) {
+      this.wheelPosition = this.wheelTargetPosition;
+      this.wheelVelocity = 0;
+      this.updateWheelCards();
+      this.drawWheelInk();
+    }
     this.selectedProject.set(project);
     this.mobileProjectMenuOpen.set(false);
     this.previewIndex.set(0);
@@ -1232,12 +1289,6 @@ export class App implements AfterViewInit, OnDestroy {
     });
   }
 
-  protected cycleTheme(direction: 1 | -1): void {
-    const currentIndex = this.themeNames.indexOf(this.activeTheme());
-    const nextIndex = (currentIndex + direction + this.themeNames.length) % this.themeNames.length;
-    this.switchTheme(this.themeNames[nextIndex]);
-  }
-
   protected switchTheme(theme: ThemeName): void {
     this.activeTheme.set(theme);
     this.applyTheme(theme);
@@ -1264,22 +1315,23 @@ export class App implements AfterViewInit, OnDestroy {
   }
 
   protected updateTypingTarget(): void {
+    if (this.terminalTyping()) {
+      const outputTarget = this.getTerminalOutputCharacter();
+      if (outputTarget) {
+        this.workspaceEffects?.setTypingTarget(outputTarget);
+        return;
+      }
+    }
+
     const input = this.commandInput?.nativeElement;
     if (input && document.activeElement === input && input.value.length > 0) {
-      const inputTarget = this.getCommandInputCaret(input);
+      const inputTarget = this.getCommandInputCharacter(input);
       if (inputTarget) {
         this.workspaceEffects?.setTypingTarget(inputTarget);
         return;
       }
     }
 
-    if (this.terminalTyping()) {
-      const outputTarget = this.getTerminalOutputCaret();
-      if (outputTarget) {
-        this.workspaceEffects?.setTypingTarget(outputTarget);
-        return;
-      }
-    }
     this.workspaceEffects?.setTypingTarget(null);
   }
 
@@ -1467,7 +1519,45 @@ export class App implements AfterViewInit, OnDestroy {
     this.drawWheelInk();
   }
 
-  private drawWheelInk(): void {
+  private animateWheelInk = (time: number): void => {
+    const deltaTime = this.wheelLastFrame === 0 ? 0 : Math.min((time - this.wheelLastFrame) / 1000, 0.05);
+    this.wheelLastFrame = time;
+    const [position, velocity] = springPosition(
+      this.wheelPosition,
+      this.wheelVelocity,
+      this.wheelTargetPosition,
+      10,
+      deltaTime,
+    );
+    this.wheelVelocity = velocity;
+    const nextPosition = Math.abs(position - this.wheelTargetPosition) < 0.0005 &&
+        Math.abs(velocity) < 0.005
+      ? this.wheelTargetPosition
+      : position;
+    if (nextPosition !== this.wheelPosition) {
+      this.wheelPosition = nextPosition;
+      this.updateWheelCards();
+    }
+    this.drawWheelInk(time);
+    if (this.wheelAnimationEnabled && !this.prefersReducedMotion()) {
+      this.wheelAnimationFrame = window.requestAnimationFrame(this.animateWheelInk);
+    }
+  };
+
+  private updateWheelCards(): void {
+    const wheel = this.wheelHost?.nativeElement;
+    if (!wheel || !this.wheelLayoutReady()) {
+      return;
+    }
+    for (const [index, card] of Array.from(wheel.querySelectorAll<HTMLElement>('.wheel-item')).entries()) {
+      card.style.transform = this.getWheelTransform(index);
+      card.style.zIndex = String(this.getProjectZIndex(index));
+      card.style.setProperty('--shade', this.getProjectShade(index));
+      card.style.visibility = this.getProjectVisibility(index);
+    }
+  }
+
+  private drawWheelInk(time = 0): void {
     const canvas = this.wheelInk?.nativeElement;
     const layout = this.wheelLayout();
     if (!canvas || layout.width === 0 || layout.height === 0) {
@@ -1476,8 +1566,12 @@ export class App implements AfterViewInit, OnDestroy {
 
     const dpr = Math.min(window.devicePixelRatio || 1, WHEEL_CONFIG.maxDpr);
     const canvasWidth = layout.width + WHEEL_CONFIG.leftBleed;
-    canvas.width = Math.round(canvasWidth * dpr);
-    canvas.height = Math.round(layout.height * dpr);
+    const pixelWidth = Math.round(canvasWidth * dpr);
+    const pixelHeight = Math.round(layout.height * dpr);
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+    }
     if (typeof CanvasRenderingContext2D === 'undefined') {
       return;
     }
@@ -1487,35 +1581,180 @@ export class App implements AfterViewInit, OnDestroy {
     }
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
     context.clearRect(0, 0, canvasWidth, layout.height);
-    context.strokeStyle = window.getComputedStyle(this.wheelHost!.nativeElement).getPropertyValue('--dim').trim();
-    context.lineWidth = 1;
-    context.globalAlpha = 0.6;
-
+    const styles = window.getComputedStyle(this.wheelHost!.nativeElement);
+    const ink = styles.getPropertyValue('--ink').trim() || '#d8d4b4';
+    const dim = styles.getPropertyValue('--dim').trim() || '#77735f';
+    const accent = styles.getPropertyValue('--accent').trim() || '#7dffb2';
     const centerX = layout.baseX + layout.radius + layout.cardWidth / 2 + WHEEL_CONFIG.leftBleed;
     const centerY = layout.height / 2;
     const maxVisibleOffset = window.innerWidth <= 700 ? 1 : 2;
+    const outerRadius = layout.radius + layout.cardHeight / 2 + 6;
+    const visibleOffsets = Array.from({ length: this.projectData.length }, (_, index) => ({
+      project: this.projectData[index],
+      index,
+      offset: this.getRelativeProjectOffset(index),
+    })).filter(({ offset }) => Math.abs(offset) <= maxVisibleOffset);
+    const point = (angle: number, radius: number): [number, number] => [
+      centerX - radius * Math.cos(angle),
+      centerY + radius * Math.sin(angle),
+    ];
+
+    context.strokeStyle = dim;
+    context.lineWidth = 0.8;
+    context.globalAlpha = 0.58;
+    context.setLineDash([12, 4, 2, 4]);
+    context.lineDashOffset = -time * 0.012;
     context.beginPath();
-    for (let step = 0; step <= 96; step += 1) {
-      const angle = ((step / 96) * 2 - 1) * maxVisibleOffset * layout.angleStep;
-      const x = centerX - layout.radius * Math.cos(angle);
-      const y = centerY + layout.radius * Math.sin(angle);
-      if (step === 0) {
-        context.moveTo(x, y);
-      } else {
-        context.lineTo(x, y);
+    context.arc(
+      centerX,
+      centerY,
+      outerRadius + 9,
+      Math.PI - (maxVisibleOffset + 0.5) * layout.angleStep,
+      Math.PI + (maxVisibleOffset + 0.5) * layout.angleStep,
+    );
+    context.stroke();
+    context.setLineDash([]);
+
+    for (const { project, index, offset } of visibleOffsets) {
+      const angle = offset * layout.angleStep;
+      const selected = Math.abs(offset) < 0.5;
+      const proximity = Math.exp(-((offset / 0.82) ** 2));
+      const startAngle = angle - layout.angleStep * 0.43;
+      const endAngle = angle + layout.angleStep * 0.43;
+
+      context.strokeStyle = dim;
+      context.globalAlpha = 0.44 + proximity * 0.42;
+      context.lineWidth = 0.75;
+      for (const railOffset of [-5, 5]) {
+        context.beginPath();
+        context.arc(centerX, centerY, outerRadius + railOffset, Math.PI - startAngle, Math.PI - endAngle, true);
+        context.stroke();
+      }
+
+      for (let tick = 0; tick <= 12; tick += 1) {
+        const tickAngle = startAngle + ((endAngle - startAngle) * tick) / 12;
+        const major = tick % 4 === 0;
+        const inner = point(tickAngle, outerRadius + 5);
+        const outer = point(tickAngle, outerRadius + (major ? 12 : 9));
+        context.globalAlpha = major ? 0.7 : 0.38;
+        context.beginPath();
+        context.moveTo(...inner);
+        context.lineTo(...outer);
+        context.stroke();
+      }
+
+      let seed = index + 1;
+      for (const character of project.id) {
+        seed = (seed * 31 + character.charCodeAt(0)) >>> 0;
+      }
+      const random = (): number => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        return seed / 4294967296;
+      };
+      const branchCount = 5 + Math.floor(random() * 3);
+      for (let branchIndex = 0; branchIndex < branchCount; branchIndex += 1) {
+        const direction = branchIndex % 2 === 0 ? 1 : -1;
+        let branchAngle = angle + (random() - 0.5) * layout.angleStep * 0.7;
+        let branchRadius = outerRadius + (direction * (4 + random() * 3));
+        const points: Array<[number, number]> = [point(branchAngle, branchRadius)];
+        const jogs = 1 + Math.floor(random() * 2);
+        for (let jog = 0; jog < jogs; jog += 1) {
+          branchAngle += direction * (0.035 + random() * 0.04);
+          points.push(point(branchAngle, branchRadius));
+          branchRadius += direction * (7 + random() * 10);
+          branchAngle += direction * Math.min(0.045, (Math.abs(branchRadius - outerRadius) / Math.max(layout.radius, 1)));
+          points.push(point(branchAngle, branchRadius));
+        }
+        branchAngle += direction * (0.025 + random() * 0.035);
+        points.push(point(branchAngle, branchRadius));
+        let length = 0;
+        for (let pointIndex = 1; pointIndex < points.length; pointIndex += 1) {
+          length += Math.hypot(
+            points[pointIndex][0] - points[pointIndex - 1][0],
+            points[pointIndex][1] - points[pointIndex - 1][1],
+          );
+        }
+        const growth = Math.min(1, 0.16 + proximity * 0.92);
+        context.strokeStyle = ink;
+        context.globalAlpha = 0.42 + proximity * 0.46;
+        context.lineWidth = selected ? 1.05 : 0.8;
+        context.setLineDash([length * growth, length + 18]);
+        context.beginPath();
+        points.forEach(([x, y], pointIndex) => {
+          if (pointIndex === 0) {
+            context.moveTo(x, y);
+          } else {
+            context.lineTo(x, y);
+          }
+        });
+        context.stroke();
+        context.setLineDash([]);
+
+        if (growth > 0.96) {
+          const [endX, endY] = points[points.length - 1];
+          const capType = branchIndex % 3;
+          context.globalAlpha = proximity;
+          context.strokeStyle = ink;
+          context.lineWidth = 0.8;
+          if (capType === 0) {
+            context.beginPath();
+            context.arc(endX, endY, 2.4, 0, Math.PI * 2);
+            context.stroke();
+            context.fillStyle = accent;
+            context.beginPath();
+            context.arc(endX, endY, 0.8, 0, Math.PI * 2);
+            context.fill();
+          } else if (capType === 1) {
+            context.fillStyle = ink;
+            context.fillRect(endX - 2, endY - 2, 4, 4);
+          } else {
+            context.beginPath();
+            context.moveTo(endX - 3, endY - 2);
+            context.lineTo(endX + 2, endY);
+            context.lineTo(endX - 3, endY + 2);
+            context.stroke();
+          }
+        }
+
+        if (selected && growth > 0.7) {
+          const pulseOffset = (time * 0.045 + branchIndex * 11) % (length + 20);
+          context.strokeStyle = accent;
+          context.globalAlpha = 0.88;
+          context.lineWidth = 1.8;
+          context.setLineDash([5, length + 20]);
+          context.lineDashOffset = -pulseOffset;
+          context.beginPath();
+          points.forEach(([x, y], pointIndex) => {
+            if (pointIndex === 0) {
+              context.moveTo(x, y);
+            } else {
+              context.lineTo(x, y);
+            }
+          });
+          context.stroke();
+          context.setLineDash([]);
+        }
+      }
+
+      const root = point(angle, outerRadius);
+      context.fillStyle = selected ? accent : dim;
+      context.globalAlpha = selected ? 0.95 : 0.55;
+      context.beginPath();
+      context.arc(root[0], root[1], selected ? 2.1 : 1.4, 0, Math.PI * 2);
+      context.fill();
+
+      if (selected) {
+        context.globalAlpha = 0.8;
+        context.fillStyle = ink;
+        context.font = '8px "IBM Plex Mono", monospace';
+        context.textAlign = 'right';
+        context.textBaseline = 'middle';
+        context.fillText(`NODE ${String(index + 1).padStart(2, '0')}`, root[0] - 9, root[1] - 8);
+        context.fillText(`0x${project.id.slice(0, 4).toUpperCase()}`, root[0] - 9, root[1] + 8);
       }
     }
-    context.stroke();
-    for (let offset = -maxVisibleOffset; offset <= maxVisibleOffset; offset += 1) {
-      const angle = offset * layout.angleStep;
-      const x = centerX - layout.radius * Math.cos(angle);
-      const y = centerY + layout.radius * Math.sin(angle);
-      context.beginPath();
-      context.moveTo(x - 3, y);
-      context.lineTo(x + 3, y);
-      context.stroke();
-    }
     context.globalAlpha = 1;
+    context.lineDashOffset = 0;
   }
 
   private updatePointerTelemetry(x: number, y: number, type: string): void {
@@ -1827,44 +2066,76 @@ export class App implements AfterViewInit, OnDestroy {
     });
   }
 
-  private getCommandInputCaret(input: HTMLInputElement): { x: number; y: number } | null {
+  private getCommandInputCharacter(input: HTMLInputElement): { x: number; y: number } | null {
     const bounds = input.getBoundingClientRect();
     const styles = window.getComputedStyle(input);
     const caretIndex = input.selectionStart ?? input.value.length;
-    const textBeforeCaret = input.value.slice(0, caretIndex);
-    const fontSize = Number.parseFloat(styles.fontSize) || 12;
+    const characterStart = caretIndex > 0 && /[\uDC00-\uDFFF]/.test(input.value[caretIndex - 1])
+      ? caretIndex - 2
+      : Math.max(0, caretIndex - 1);
+    const textBeforeCharacter = input.value.slice(0, characterStart);
+    const character = input.value.slice(characterStart, caretIndex) || input.value[caretIndex] || '';
     const letterSpacing = Number.parseFloat(styles.letterSpacing) || 0;
-    let textWidth = textBeforeCaret.length * fontSize * 0.6;
+    let textWidth = textBeforeCharacter.length * 7.2;
+    let characterWidth = character.length * 7.2;
     if (typeof window.CanvasRenderingContext2D !== 'undefined') {
       const context = document.createElement('canvas').getContext('2d');
       if (context) {
         context.font = styles.font;
-        textWidth = context.measureText(textBeforeCaret).width;
+        textWidth = context.measureText(textBeforeCharacter).width;
+        characterWidth = context.measureText(character).width;
       }
     }
-    textWidth += Math.max(0, textBeforeCaret.length - 1) * letterSpacing;
+    textWidth += Math.max(0, textBeforeCharacter.length - 1) * letterSpacing;
+    characterWidth += letterSpacing;
 
     const left = bounds.left + input.clientLeft + (Number.parseFloat(styles.paddingLeft) || 0) - input.scrollLeft;
     return {
-      x: Math.max(bounds.left, Math.min(bounds.right, left + textWidth)),
+      x: Math.max(bounds.left, Math.min(bounds.right, left + textWidth + characterWidth / 2)),
       y: bounds.top + bounds.height / 2,
     };
   }
 
-  private getTerminalOutputCaret(): { x: number; y: number } | null {
+  private getTerminalOutputCharacter(): { x: number; y: number } | null {
     const output = this.terminalOutput?.nativeElement;
     const line = output?.lastElementChild;
     if (!(line instanceof HTMLElement)) {
       return null;
     }
+    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+    let lastTextNode: Text | null = null;
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (node instanceof Text && node.length > 0) {
+        lastTextNode = node;
+      }
+    }
+    if (!lastTextNode) {
+      return null;
+    }
+
+    const lastCharacterIndex = lastTextNode.length > 1 &&
+        /[\uDC00-\uDFFF]/.test(lastTextNode.data[lastTextNode.length - 1])
+      ? lastTextNode.length - 2
+      : lastTextNode.length - 1;
     const range = document.createRange();
-    range.selectNodeContents(line);
-    range.collapse(false);
-    const rangeBounds = typeof range.getBoundingClientRect === 'function' ? range.getBoundingClientRect() : null;
-    const bounds = rangeBounds && (rangeBounds.width > 0 || rangeBounds.height > 0)
-      ? rangeBounds
-      : line.getBoundingClientRect();
-    return { x: bounds.right, y: bounds.top + bounds.height / 2 };
+    range.setStart(lastTextNode, lastCharacterIndex);
+    range.setEnd(lastTextNode, lastTextNode.length);
+    const characterBounds = typeof range.getBoundingClientRect === 'function'
+      ? range.getBoundingClientRect()
+      : null;
+    if (characterBounds && (characterBounds.width > 0 || characterBounds.height > 0)) {
+      return {
+        x: characterBounds.left + characterBounds.width / 2,
+        y: characterBounds.top + characterBounds.height / 2,
+      };
+    }
+
+    const lineBounds = line.getBoundingClientRect();
+    return {
+      x: lineBounds.right,
+      y: lineBounds.top + lineBounds.height / 2,
+    };
   }
 
   private showScriptedKey(character: string): void {

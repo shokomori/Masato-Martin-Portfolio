@@ -239,7 +239,23 @@
       <p class="col"><span class="label">GHOST</span><span class="value">{{ terminalTyping() ? 'typing' : 'idle' }}</span></p>
     </div>
 
-    <button class="den" type="button" aria-label="Switch themes" (click)="cycleTheme(1)" [attr.data-tip]="'switch theme · ' + activeTheme()"></button>
+    <div class="theme-section" role="group" aria-label="Theme palette">
+      <span class="theme-label">:theme</span>
+      <div class="theme-options">
+        @for (option of themeOptions; track option.name) {
+          <button
+            class="theme-option"
+            type="button"
+            [style.--swatch]="option.swatch"
+            [attr.aria-label]="'Use ' + option.name + ' theme'"
+            [attr.aria-pressed]="activeTheme() === option.name"
+            [attr.data-theme]="option.name"
+            (click)="switchTheme(option.name)"
+          ></button>
+        }
+      </div>
+      <span class="theme-current" aria-live="polite">{{ activeTheme() }}</span>
+    </div>
   </div>
 
   <section class="desk" #deskHost aria-label="Live keyboard and pointer telemetry">

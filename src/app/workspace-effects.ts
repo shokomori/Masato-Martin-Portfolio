@@ -474,13 +474,17 @@ export function createWorkspaceEffects(options: WorkspaceEffectOptions) {
     context.setLineDash([]);
     context.strokeRect(from.x - 5, from.y - 5, 10, 10);
     if (typingPosition) {
-      context.strokeStyle = palette.accent;
-      context.globalAlpha = 0.72;
+      context.strokeStyle = palette.dim;
+      context.globalAlpha = 0.52;
+      context.lineWidth = 1;
+      context.setLineDash([...WORKSPACE_EFFECTS_CONFIG.lineDash]);
+      context.lineDashOffset = -(timestamp / 180) % 6;
       context.beginPath();
       context.moveTo(typingPosition.x, typingPosition.y);
       context.lineTo(to.x, to.y);
       context.stroke();
-      context.strokeRect(typingPosition.x - 4, typingPosition.y - 4, 8, 8);
+      context.setLineDash([]);
+      context.strokeRect(typingPosition.x - 5, typingPosition.y - 5, 10, 10);
     }
     context.beginPath();
     context.arc(to.x, to.y, 5, 0, Math.PI * 2);

@@ -88,10 +88,29 @@ describe('App workspace interactions', () => {
     expect(element.querySelector('main.stage')?.hasAttribute('inert')).toBe(false);
 
     element.querySelector<HTMLButtonElement>('.wheel-item[aria-label="VoxFilter"]')?.click();
-    element.querySelector<HTMLButtonElement>('.den')?.click();
+    element.querySelector<HTMLButtonElement>('.theme-option[data-theme="violet"]')?.click();
     fixture.detectChanges();
     expect(selectedProject(element)).toBe('VoxFilter');
+    expect(element.getAttribute('data-theme')).toBe('violet');
     expect(element.querySelector('.portfolio-intro')).toBeNull();
+
+    fixture.destroy();
+  });
+
+  it('offers an accessible theme palette in place of the theme-cycle button', () => {
+    window.localStorage.setItem('portfolio-theme', 'black');
+    const { fixture, element } = createWorkspace();
+
+    expect(element.querySelectorAll('.theme-option').length).toBe(6);
+    expect(element.querySelector('.den')).toBeNull();
+    expect(element.querySelector('.theme-option[data-theme="black"]')?.getAttribute('aria-pressed')).toBe('true');
+
+    element.querySelector<HTMLButtonElement>('.theme-option[data-theme="blue"]')?.click();
+    fixture.detectChanges();
+
+    expect(element.getAttribute('data-theme')).toBe('blue');
+    expect(element.querySelector('.theme-option[data-theme="blue"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(element.querySelector('.theme-current')?.textContent?.trim()).toBe('blue');
 
     fixture.destroy();
   });
